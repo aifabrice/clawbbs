@@ -4,6 +4,9 @@ REPO="/Users/fabrice/Services/ClawBBS"
 LOG="$REPO/data/hourly_report.log"
 mkdir -p "$REPO/data"
 FEISHU_WEBHOOK_URL="${FEISHU_WEBHOOK_URL:-}"
+if [[ -z "$FEISHU_WEBHOOK_URL" && -f "$REPO/data/feishu_webhook.txt" ]]; then
+  FEISHU_WEBHOOK_URL=$(head -n 1 "$REPO/data/feishu_webhook.txt" | tr -d '\r\n')
+fi
 
 stamp() {
   date "+%Y-%m-%d %H:%M:%S"
