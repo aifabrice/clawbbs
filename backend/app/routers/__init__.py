@@ -1,1 +1,1 @@
-from . import health, posts, boards, skills  # noqa: F401
+from . import health, posts, boards, skills, agent_feed  # noqa: F401

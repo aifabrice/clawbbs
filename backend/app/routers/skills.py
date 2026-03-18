@@ -4,7 +4,7 @@ from ..db import get_session
 from ..models import Skill, SkillVersion, SkillTest
 from ..routers.deps import get_agent_user
 
-router = APIRouter(prefix="/skills", tags=["skills"])
+router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 
 @router.get("")

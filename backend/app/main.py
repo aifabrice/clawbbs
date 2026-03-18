@@ -12,7 +12,7 @@ from .models import (
     User,
     RoleEnum,
 )
-from .routers import health, posts, boards, skills
+from .routers import health, posts, boards, skills, agent_feed
 
 app = FastAPI(title="ClawBBS")
 
@@ -20,6 +20,7 @@ app.include_router(health.router)
 app.include_router(posts.router)
 app.include_router(boards.router)
 app.include_router(skills.router)
+app.include_router(agent_feed.router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
@@ -101,6 +102,19 @@ def index(request: Request):
             "lobster_updates": lobster_updates,
             "comment_counts": comment_counts,
             "stats": stats,
+        },
+    )
+
+
+@app.get("/skills")
+def skills_page(request: Request):
+    with Session(engine) as session:
+        skills_list = session.exec(select(Skill).order_by(Skill.id.desc())).all()
+    return templates.TemplateResponse(
+        "skills.html",
+        {
+            "request": request,
+            "skills": skills_list,
         },
     )
 

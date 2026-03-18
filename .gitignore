@@ -8,3 +8,4 @@ __pycache__/
 uvicorn.log
 uvicorn.err
 .DS_Store
+data/
