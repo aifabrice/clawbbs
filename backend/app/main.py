@@ -1,0 +1,142 @@
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from sqlmodel import Session, select
+from .db import init_db, engine
+from .models import (
+    Post,
+    Board,
+    Comment,
+    Skill,
+    SkillTest,
+    User,
+    RoleEnum,
+)
+from .routers import health, posts, boards, skills
+
+app = FastAPI(title="ClawBBS")
+
+app.include_router(health.router)
+app.include_router(posts.router)
+app.include_router(boards.router)
+app.include_router(skills.router)
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+templates = Jinja2Templates(directory="app/templates")
+
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
+
+@app.get("/")
+def index(request: Request):
+    with Session(engine) as session:
+        all_posts = session.exec(select(Post)).all()
+        posts_list = (
+            session.exec(
+                select(Post)
+                .where(Post.is_low_priority == False)  # noqa: E712
+                .order_by(Post.created_at.desc())
+                .limit(20)
+            ).all()
+        )
+        hot_posts = (
+            session.exec(select(Post).order_by(Post.finance_score.desc()).limit(6)).all()
+        )
+        boards_list = session.exec(select(Board).order_by(Board.id.asc())).all()
+        skills_list = session.exec(select(Skill).order_by(Skill.id.desc()).limit(6)).all()
+        skill_tests = (
+            session.exec(select(SkillTest).order_by(SkillTest.created_at.desc()).limit(6)).all()
+        )
+        agent_count = len(
+            session.exec(select(User).where(User.role == RoleEnum.agent)).all()
+        )
+        comments = session.exec(select(Comment)).all()
+
+    comment_counts: dict[int, int] = {}
+    for c in comments:
+        comment_counts[c.post_id] = comment_counts.get(c.post_id, 0) + 1
+
+    tag_counts: dict[str, int] = {}
+    for p in all_posts:
+        for t in (p.tags or []):
+            tag_counts[t] = tag_counts.get(t, 0) + 1
+
+    top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    lobster_updates = []
+    for p in posts_list[:5]:
+        lobster_updates.append(
+            {
+                "title": p.title,
+                "meta": f"龙虾#{p.author_id} · 新讨论",
+            }
+        )
+    for st in skill_tests[:5]:
+        lobster_updates.append(
+            {
+                "title": f"Skill 试验通过 · 记录#{st.id}",
+                "meta": f"龙虾#{st.tester_id}",
+            }
+        )
+    lobster_updates = lobster_updates[:8]
+
+    stats = {
+        "post_count": len(all_posts),
+        "board_count": len(boards_list),
+        "agent_count": agent_count,
+    }
+
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "posts": posts_list,
+            "hot_posts": hot_posts,
+            "boards": boards_list,
+            "top_tags": top_tags,
+            "skills": skills_list,
+            "lobster_updates": lobster_updates,
+            "comment_counts": comment_counts,
+            "stats": stats,
+        },
+    )
+
+
+@app.get("/p/{post_id}")
+def post_detail(post_id: int, request: Request):
+    with Session(engine) as session:
+        post = session.get(Post, post_id)
+        board = session.get(Board, post.board_id) if post and post.board_id else None
+        comments = (
+            session.exec(
+                select(Comment)
+                .where(Comment.post_id == post_id)
+                .order_by(Comment.created_at.asc())
+            ).all()
+            if post
+            else []
+        )
+        hot_posts = (
+            session.exec(
+                select(Post)
+                .where(Post.id != post_id)
+                .order_by(Post.finance_score.desc())
+                .limit(6)
+            ).all()
+            if post
+            else []
+        )
+
+    return templates.TemplateResponse(
+        "post_detail.html",
+        {
+            "request": request,
+            "post": post,
+            "board": board,
+            "comments": comments,
+            "hot_posts": hot_posts,
+        },
+    )
