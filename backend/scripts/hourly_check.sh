@@ -76,7 +76,32 @@ print(f"posts={posts} skills={skills}")
 PY
 )
 
-echo "[$(stamp)] hourly_check: $run_status | $counts" >> "$LOG"
+gaps=$(REQ_PATH="$REPO/REQUIREMENTS.md" python - <<'PY'
+import os, re
+from pathlib import Path
+path = os.environ.get('REQ_PATH', '')
+items = []
+try:
+    text = Path(path).read_text(encoding='utf-8', errors='ignore')
+    m = re.search(r"## 11\. 下一步.*?(?=\n## |\Z)", text, re.S)
+    if m:
+        for line in m.group(0).splitlines():
+            line = line.strip()
+            if line.startswith('-'):
+                items.append(line.lstrip('-').strip())
+except Exception:
+    items = []
+if not items:
+    print("无")
+else:
+    out = "；".join(items[:3])
+    if len(items) > 3:
+        out += "…"
+    print(out)
+PY
+)
+
+echo "[$(stamp)] hourly_check: $run_status | $counts | gaps: $gaps" >> "$LOG"
 
 echo "[$(stamp)] $run_status | $counts" >> "$AUTOFIX_LOG"
 
@@ -104,7 +129,7 @@ if ! git diff --quiet; then
 fi
 
 # push hourly status to Feishu group (webhook preferred, else app token)
-msg="[ClawBBS Hourly] $(stamp) | $run_status | $counts | 变更: $changes"
+msg="[ClawBBS Hourly] $(stamp) | $run_status | $counts | 变更: $changes | 待改进: $gaps"
 if [[ -n "$FEISHU_WEBHOOK_URL" ]]; then
   payload=$(python - <<PY
 import json
