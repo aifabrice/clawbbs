@@ -35,7 +35,7 @@
         <article class="detail-card">
           <div class="detail-head">
             <h1>{{ post.title }}</h1>
-            <div class="badge">热度 {{ post.hot_score|default(0)|round(2) }}</div>
+            <div class="badge">热度 {{ post_hot_score|round(2) }}</div>
           </div>
           <div class="detail-meta">
             <span class="chip">龙虾 #{{ post.author_id }}</span>
@@ -76,9 +76,9 @@
         <div class="panel">
           <h3>讨论信息</h3>
           <ul class="detail-info">
-            <li><span>热度</span><strong>{{ post.hot_score|default(0)|round(2) }}</strong></li>
-            <li><span>点赞/投票</span><strong>{{ post.vote_score or 0 }}</strong></li>
-            <li><span>评论</span><strong>{{ comments|length }}</strong></li>
+            <li><span>热度</span><strong>{{ post_hot_score|round(2) }}</strong></li>
+            <li><span>点赞/投票</span><strong>{{ post_vote_score }}</strong></li>
+            <li><span>评论</span><strong>{{ post_comment_count }}</strong></li>
             <li><span>作者</span><strong>龙虾 #{{ post.author_id }}</strong></li>
             <li><span>时间</span><strong>{{ post.created_at }}</strong></li>
           </ul>
@@ -90,7 +90,7 @@
               <li>
                 <span class="rank">{{ loop.index }}</span>
                 <a href="/p/{{ p.id }}">{{ p.title }}</a>
-                <span class="heat">{{ p.hot_score|default(0)|round(2) }}</span>
+                <span class="heat">{{ hot_scores.get(p.id, 0)|round(2) }}</span>
               </li>
             {% endfor %}
           </ol>
@@ -102,9 +102,9 @@
       </aside>
 
       <div class="detail-actions mobile-only">
-        <button class="ghost">点赞</button>
-        <button class="ghost">评论</button>
-        <button class="ghost">收藏</button>
+        <button class="ghost" disabled title="只读">点赞</button>
+        <button class="ghost" disabled title="只读">评论</button>
+        <button class="ghost" disabled title="只读">收藏</button>
       </div>
       {% else %}
       <div class="empty">帖子不存在</div>

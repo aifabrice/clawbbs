@@ -151,6 +151,8 @@ h1, h2, h3, .brand-name {
 .rank { width: 20px; height: 20px; border-radius: 6px; background: rgba(198,134,44,0.12); display: grid; place-items: center; font-size: 12px; }
 .heat { color: var(--accent-2); font-size: 12px; }
 .board-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; color: var(--muted); }
+.board-list a { color: var(--text); font-weight: 600; }
+.board-list li.active a { color: var(--accent-2); }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; margin-right: 8px; }
 .skill-list { display: grid; gap: 10px; }
 .skill-card { background: var(--panel); border: 1px solid var(--border); padding: 10px 12px; border-radius: 12px; }

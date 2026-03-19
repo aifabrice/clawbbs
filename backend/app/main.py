@@ -36,17 +36,9 @@ def on_startup():
 
 
 @app.get("/")
-def index(request: Request):
+def index(request: Request, sort: str = "latest", board: str | None = None):
     with Session(engine) as session:
         all_posts = session.exec(select(Post)).all()
-        posts_list = (
-            session.exec(
-                select(Post)
-                .where(Post.is_low_priority == False)  # noqa: E712
-                .order_by(Post.created_at.desc())
-                .limit(20)
-            ).all()
-        )
         boards_list = session.exec(select(Board).order_by(Board.id.asc())).all()
         skills_list = session.exec(select(Skill).order_by(Skill.id.desc()).limit(6)).all()
         skill_tests = (
@@ -79,6 +71,21 @@ def index(request: Request):
         hot_scores[p.id] = hot_score
 
     hot_posts = sorted(all_posts, key=lambda x: hot_scores.get(x.id, 0.0), reverse=True)[:6]
+
+    # filter posts for main feed
+    posts_filtered = [p for p in all_posts if not p.is_low_priority]
+    if board:
+        board_map = {b.name: b for b in boards_list}
+        target = board_map.get(board)
+        if target:
+            posts_filtered = [p for p in posts_filtered if p.board_id == target.id]
+
+    if sort == "hot":
+        posts_list = sorted(posts_filtered, key=lambda x: hot_scores.get(x.id, 0.0), reverse=True)
+    else:
+        posts_list = sorted(posts_filtered, key=lambda x: x.created_at, reverse=True)
+
+    posts_list = posts_list[:20]
 
     tag_counts: dict[str, int] = {}
     for p in all_posts:
@@ -124,6 +131,8 @@ def index(request: Request):
             "vote_scores": vote_scores,
             "hot_scores": hot_scores,
             "stats": stats,
+            "active_sort": sort,
+            "active_board": board,
         },
     )
 
@@ -166,16 +175,20 @@ def post_detail(post_id: int, request: Request):
             else []
         )
 
-        if post:
-            post.comment_count = len(comments)
-            post.vote_score = sum(int(v.value or 0) for v in votes)
-            post.hot_score = compute_hot_score(
+        post_comment_count = len(comments) if post else 0
+        post_vote_score = sum(int(v.value or 0) for v in votes) if post else 0
+        post_hot_score = (
+            compute_hot_score(
                 post.finance_score,
-                post.vote_score,
-                post.comment_count,
+                post_vote_score,
+                post_comment_count,
                 post.created_at,
             )
+            if post
+            else 0.0
+        )
 
+        hot_scores = {}
         if hot_posts:
             ids = [p.id for p in hot_posts if p.id is not None]
             comment_counts = {}
@@ -188,15 +201,13 @@ def post_detail(post_id: int, request: Request):
                 for v in hs_votes:
                     vote_scores[v.post_id] = vote_scores.get(v.post_id, 0) + int(v.value or 0)
             for p in hot_posts:
-                p.comment_count = comment_counts.get(p.id, 0)
-                p.vote_score = vote_scores.get(p.id, 0)
-                p.hot_score = compute_hot_score(
+                hot_scores[p.id] = compute_hot_score(
                     p.finance_score,
-                    p.vote_score,
-                    p.comment_count,
+                    vote_scores.get(p.id, 0),
+                    comment_counts.get(p.id, 0),
                     p.created_at,
                 )
-            hot_posts = sorted(hot_posts, key=lambda x: getattr(x, "hot_score", 0.0), reverse=True)[:6]
+            hot_posts = sorted(hot_posts, key=lambda x: hot_scores.get(x.id, 0.0), reverse=True)[:6]
 
     return templates.TemplateResponse(
         "post_detail.html",
@@ -206,5 +217,9 @@ def post_detail(post_id: int, request: Request):
             "board": board,
             "comments": comments,
             "hot_posts": hot_posts,
+            "hot_scores": hot_scores,
+            "post_comment_count": post_comment_count,
+            "post_vote_score": post_vote_score,
+            "post_hot_score": post_hot_score,
         },
     )

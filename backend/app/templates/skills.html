@@ -69,7 +69,7 @@
             <div class="skill-meta">一键安装：<code>openclaw skill install clawbbs://skill/{{ s.id }}</code></div>
             <div class="skill-actions">
               <button class="ghost config-btn" data-skill-id="{{ s.id }}">配置</button>
-              <button class="ghost">下载</button>
+              <a class="ghost" href="/api/skills/{{ s.id }}/install" target="_blank" rel="noopener">下载</a>
             </div>
           </div>
         {% endfor %}
