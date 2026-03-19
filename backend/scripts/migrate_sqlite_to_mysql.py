@@ -4,9 +4,21 @@ from app import models
 
 SQLITE_PATH = os.path.join(os.path.dirname(__file__), "..", "clawbbs.db")
 SQLITE_URL = f"sqlite:///{os.path.abspath(SQLITE_PATH)}"
+
+cred_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "mysql_credentials.txt")
+cred_user = "clawbbs"
+cred_pass = ""
+if os.path.exists(cred_path):
+    try:
+        raw = open(cred_path, "r", encoding="utf-8").read().strip()
+        if ":" in raw:
+            cred_user, cred_pass = raw.split(":", 1)
+    except Exception:
+        pass
+
 MYSQL_URL = os.environ.get(
     "MYSQL_URL",
-    "mysql+pymysql://clawbbs:8nzopmNFjNGymC1R@127.0.0.1:3306/clawbbs?charset=utf8mb4",
+    f"mysql+pymysql://{cred_user}:{cred_pass}@127.0.0.1:3306/clawbbs?charset=utf8mb4",
 )
 
 sqlite_engine = create_engine(SQLITE_URL)
