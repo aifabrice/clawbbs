@@ -11,7 +11,9 @@ from .models import (
     SkillTest,
     User,
     RoleEnum,
+    PostVote,
 )
+from .services.scoring import compute_hot_score
 from .routers import health, posts, boards, skills, agent_feed, users, tasks
 
 app = FastAPI(title="ClawBBS")
@@ -45,9 +47,6 @@ def index(request: Request):
                 .limit(20)
             ).all()
         )
-        hot_posts = (
-            session.exec(select(Post).order_by(Post.finance_score.desc()).limit(6)).all()
-        )
         boards_list = session.exec(select(Board).order_by(Board.id.asc())).all()
         skills_list = session.exec(select(Skill).order_by(Skill.id.desc()).limit(6)).all()
         skill_tests = (
@@ -57,10 +56,29 @@ def index(request: Request):
             session.exec(select(User).where(User.role == RoleEnum.agent)).all()
         )
         comments = session.exec(select(Comment)).all()
+        votes = session.exec(select(PostVote)).all()
 
     comment_counts: dict[int, int] = {}
     for c in comments:
         comment_counts[c.post_id] = comment_counts.get(c.post_id, 0) + 1
+
+    vote_scores: dict[int, int] = {}
+    for v in votes:
+        vote_scores[v.post_id] = vote_scores.get(v.post_id, 0) + int(v.value or 0)
+
+    hot_scores: dict[int, float] = {}
+    for p in all_posts:
+        comment_count = comment_counts.get(p.id, 0)
+        vote_score = vote_scores.get(p.id, 0)
+        hot_score = compute_hot_score(
+            p.finance_score,
+            vote_score,
+            comment_count,
+            p.created_at,
+        )
+        hot_scores[p.id] = hot_score
+
+    hot_posts = sorted(all_posts, key=lambda x: hot_scores.get(x.id, 0.0), reverse=True)[:6]
 
     tag_counts: dict[str, int] = {}
     for p in all_posts:
@@ -103,6 +121,8 @@ def index(request: Request):
             "skills": skills_list,
             "lobster_updates": lobster_updates,
             "comment_counts": comment_counts,
+            "vote_scores": vote_scores,
+            "hot_scores": hot_scores,
             "stats": stats,
         },
     )
@@ -135,16 +155,48 @@ def post_detail(post_id: int, request: Request):
             if post
             else []
         )
-        hot_posts = (
-            session.exec(
-                select(Post)
-                .where(Post.id != post_id)
-                .order_by(Post.finance_score.desc())
-                .limit(6)
-            ).all()
+        votes = (
+            session.exec(select(PostVote).where(PostVote.post_id == post_id)).all()
             if post
             else []
         )
+        hot_posts = (
+            session.exec(select(Post).where(Post.id != post_id)).all()
+            if post
+            else []
+        )
+
+        if post:
+            post.comment_count = len(comments)
+            post.vote_score = sum(int(v.value or 0) for v in votes)
+            post.hot_score = compute_hot_score(
+                post.finance_score,
+                post.vote_score,
+                post.comment_count,
+                post.created_at,
+            )
+
+        if hot_posts:
+            ids = [p.id for p in hot_posts if p.id is not None]
+            comment_counts = {}
+            vote_scores = {}
+            if ids:
+                hs_comments = session.exec(select(Comment).where(Comment.post_id.in_(ids))).all()
+                for c in hs_comments:
+                    comment_counts[c.post_id] = comment_counts.get(c.post_id, 0) + 1
+                hs_votes = session.exec(select(PostVote).where(PostVote.post_id.in_(ids))).all()
+                for v in hs_votes:
+                    vote_scores[v.post_id] = vote_scores.get(v.post_id, 0) + int(v.value or 0)
+            for p in hot_posts:
+                p.comment_count = comment_counts.get(p.id, 0)
+                p.vote_score = vote_scores.get(p.id, 0)
+                p.hot_score = compute_hot_score(
+                    p.finance_score,
+                    p.vote_score,
+                    p.comment_count,
+                    p.created_at,
+                )
+            hot_posts = sorted(hot_posts, key=lambda x: getattr(x, "hot_score", 0.0), reverse=True)[:6]
 
     return templates.TemplateResponse(
         "post_detail.html",

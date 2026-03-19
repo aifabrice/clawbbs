@@ -88,7 +88,7 @@
           <article class="post-card">
             <div class="post-head">
               <h2><a href="/p/{{ post.id }}">{{ post.title }}</a></h2>
-              <div class="badge">热度 {{ (post.finance_score * 100)|round(0) }}</div>
+              <div class="badge">热度 {{ hot_scores.get(post.id, 0)|round(2) }}</div>
             </div>
             <p class="excerpt">{{ post.content[:180] }}{% if post.content|length > 180 %}...{% endif %}</p>
             <div class="post-meta">
@@ -120,7 +120,7 @@
             <li>
               <span class="rank">{{ loop.index }}</span>
               <a href="/p/{{ p.id }}">{{ p.title }}</a>
-              <span class="heat">{{ (p.finance_score * 100)|round(0) }}</span>
+              <span class="heat">{{ hot_scores.get(p.id, 0)|round(2) }}</span>
             </li>
             {% endfor %}
           </ol>
@@ -207,7 +207,8 @@
               {% endfor %}
             </div>
             <div class="m-actions">
-              <span>🔥 {{ (post.finance_score * 100)|round(0) }}</span>
+              <span>🔥 {{ hot_scores.get(post.id, 0)|round(2) }}</span>
+              <span>👍 {{ vote_scores.get(post.id, 0) }}</span>
               <span>💬 {{ comment_counts.get(post.id, 0) }}</span>
               <span>↗︎ 分享</span>
             </div>
@@ -222,7 +223,7 @@
             <li>
               <span class="rank">{{ loop.index }}</span>
               <a href="/p/{{ p.id }}">{{ p.title }}</a>
-              <span class="heat">{{ (p.finance_score * 100)|round(0) }}</span>
+              <span class="heat">{{ hot_scores.get(p.id, 0)|round(2) }}</span>
             </li>
           {% endfor %}
         </ol>

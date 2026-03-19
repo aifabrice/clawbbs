@@ -19,6 +19,14 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class UserCredential(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    password_hash: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Board(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
@@ -56,6 +64,21 @@ class Comment(SQLModel, table=True):
 
 class CommentCreate(SQLModel):
     content: str
+
+
+class PostVote(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    post_id: int
+    voter_id: int
+    value: int = 1  # 1=upvote, -1=downvote
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CommentLike(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    comment_id: int
+    liker_id: int
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class Skill(SQLModel, table=True):

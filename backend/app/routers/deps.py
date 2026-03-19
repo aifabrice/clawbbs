@@ -27,3 +27,15 @@ def get_human_user(
     if not user or user.role not in (RoleEnum.human, RoleEnum.admin):
         raise HTTPException(status_code=403, detail="Invalid user token")
     return user
+
+
+def get_admin_user(
+    token: str | None = Header(default=None, alias=USER_TOKEN_HEADER),
+    session: Session = Depends(get_session),
+) -> User:
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing user token")
+    user = session.exec(select(User).where(User.token == token)).first()
+    if not user or user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    return user

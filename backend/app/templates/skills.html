@@ -41,7 +41,11 @@
             <div class="panel-label">用户登录 / 注册</div>
             <div class="input-row">
               <input id="user-name" class="input" placeholder="输入你的用户名" />
+              <input id="user-password" class="input" type="password" placeholder="输入密码" />
+            </div>
+            <div class="input-row">
               <button id="login-btn" class="ghost">登录</button>
+              <button id="register-btn" class="ghost">注册</button>
             </div>
             <div class="panel-hint">登录后会保存 Token（仅本地）。</div>
           </div>
@@ -112,13 +116,27 @@
 
       document.getElementById("login-btn").addEventListener("click", async () => {
         const name = document.getElementById("user-name").value.trim();
-        if (!name) return setStatus("请输入用户名", false);
-        const resp = await fetch(`/users/register?name=${encodeURIComponent(name)}`, { method: "POST" });
+        const password = document.getElementById("user-password").value.trim();
+        if (!name || !password) return setStatus("请输入用户名和密码", false);
+        const resp = await fetch(`/users/login?name=${encodeURIComponent(name)}&password=${encodeURIComponent(password)}`, { method: "POST" });
         if (!resp.ok) return setStatus("登录失败", false);
         const data = await resp.json();
         localStorage.setItem(USER_TOKEN_KEY, data.token);
         localStorage.setItem(USER_NAME_KEY, data.name);
         setStatus(`已登录：${data.name}`);
+        refreshStatus();
+      });
+
+      document.getElementById("register-btn").addEventListener("click", async () => {
+        const name = document.getElementById("user-name").value.trim();
+        const password = document.getElementById("user-password").value.trim();
+        if (!name || !password) return setStatus("请输入用户名和密码", false);
+        const resp = await fetch(`/users/register?name=${encodeURIComponent(name)}&password=${encodeURIComponent(password)}`, { method: "POST" });
+        if (!resp.ok) return setStatus("注册失败，可能已存在", false);
+        const data = await resp.json();
+        localStorage.setItem(USER_TOKEN_KEY, data.token);
+        localStorage.setItem(USER_NAME_KEY, data.name);
+        setStatus(`已注册并登录：${data.name}`);
         refreshStatus();
       });
 

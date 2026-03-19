@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 
 FINANCE_KEYWORDS = [
     "股票", "个股", "财报", "市盈率", "基金", "宏观", "A股", "美股", "港股", "量化", "波动率",
@@ -23,3 +24,31 @@ def compute_finance_score(text: str, tags: list[str] | None = None) -> float:
     if len(text) > 800:
         score += 0.05
     return min(score, 1.0)
+
+
+def compute_hot_score(
+    finance_score: float,
+    vote_score: int,
+    comment_count: int,
+    created_at,
+) -> float:
+    # time decay: half-life ~12h
+    now = datetime.utcnow()
+    age_hours = max((now - created_at).total_seconds() / 3600.0, 0.0)
+    base = finance_score * 2.0 + vote_score * 0.7 + comment_count * 0.4
+    decay = 1.0 / (1.0 + age_hours / 12.0)
+    return round(base * decay, 4)
+
+
+def compute_recommend_score(
+    finance_score: float,
+    vote_score: int,
+    comment_count: int,
+    created_at,
+) -> float:
+    # emphasize finance relevance + mild freshness
+    now = datetime.utcnow()
+    age_hours = max((now - created_at).total_seconds() / 3600.0, 0.0)
+    freshness = 1.0 / (1.0 + age_hours / 24.0)
+    base = finance_score * 2.6 + vote_score * 0.4 + comment_count * 0.3
+    return round(base * freshness, 4)

@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
+import hashlib
+import hmac
 import secrets
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from ..db import get_session
-from ..models import User, RoleEnum, PairingCode, UserBinding
+from ..models import User, RoleEnum, PairingCode, UserBinding, UserCredential
 from ..routers.deps import get_human_user, get_agent_user
 from ..config import USER_TOKEN_HEADER, PAIRING_CODE_TTL_MINUTES
 
@@ -16,21 +18,86 @@ def _pairing_expired(code: PairingCode) -> bool:
     return datetime.utcnow() > code.expires_at
 
 
+def _hash_password(password: str) -> str:
+    salt = secrets.token_hex(8)
+    iterations = 120000
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations)
+    return f"pbkdf2_sha256${iterations}${salt}${dk.hex()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        scheme, iterations, salt, digest = stored.split("$", 3)
+        if scheme != "pbkdf2_sha256":
+            return False
+        dk = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt.encode("utf-8"),
+            int(iterations),
+        )
+        return hmac.compare_digest(dk.hex(), digest)
+    except Exception:
+        return False
+
+
 @router.post("/register")
-def register_user(name: str, session: Session = Depends(get_session)):
+def register_user(name: str, password: str, session: Session = Depends(get_session)):
+    if not password:
+        raise HTTPException(status_code=400, detail="Password required")
     existing = session.exec(
         select(User).where((User.name == name) & (User.role == RoleEnum.human))
     ).first()
     if existing:
+        cred = session.exec(
+            select(UserCredential).where(UserCredential.user_id == existing.id)
+        ).first()
+        if cred:
+            raise HTTPException(status_code=400, detail="User already exists")
+        existing.token = existing.token or secrets.token_urlsafe(24)
+        cred = UserCredential(user_id=existing.id, password_hash=_hash_password(password))
+        session.add(existing)
+        session.add(cred)
+        session.commit()
+        session.refresh(existing)
         return {
             "id": existing.id,
             "name": existing.name,
             "token": existing.token,
             "header": USER_TOKEN_HEADER,
-            "note": "existing_user",
+            "note": "password_set",
         }
+
     token = secrets.token_urlsafe(24)
     user = User(name=name, role=RoleEnum.human, token=token)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    cred = UserCredential(user_id=user.id, password_hash=_hash_password(password))
+    session.add(cred)
+    session.commit()
+    return {
+        "id": user.id,
+        "name": user.name,
+        "token": user.token,
+        "header": USER_TOKEN_HEADER,
+        "note": "created",
+    }
+
+
+@router.post("/login")
+def login_user(name: str, password: str, session: Session = Depends(get_session)):
+    user = session.exec(
+        select(User).where((User.name == name) & (User.role == RoleEnum.human))
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    cred = session.exec(
+        select(UserCredential).where(UserCredential.user_id == user.id)
+    ).first()
+    if not cred or not _verify_password(password, cred.password_hash):
+        raise HTTPException(status_code=403, detail="Invalid credentials")
+    user.token = secrets.token_urlsafe(24)
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -39,7 +106,7 @@ def register_user(name: str, session: Session = Depends(get_session)):
         "name": user.name,
         "token": user.token,
         "header": USER_TOKEN_HEADER,
-        "note": "created",
+        "note": "login",
     }
 
 

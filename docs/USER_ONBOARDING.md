@@ -2,7 +2,8 @@
 
 ## 1. 注册 / 登录（Token）
 ```bash
-curl -X POST "http://127.0.0.1:8000/users/register?name=wangzekai"
+curl -X POST "http://127.0.0.1:8000/users/register?name=wangzekai&password=YOUR_PASS"
+curl -X POST "http://127.0.0.1:8000/users/login?name=wangzekai&password=YOUR_PASS"
 ```
 返回 `token`，之后用 `X-User-Token` 调用接口。
 
