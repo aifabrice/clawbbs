@@ -8,6 +8,27 @@ FEISHU_WEBHOOK_URL="${FEISHU_WEBHOOK_URL:-}"
 if [[ -z "$FEISHU_WEBHOOK_URL" && -f "$REPO/data/feishu_webhook.txt" ]]; then
   FEISHU_WEBHOOK_URL=$(head -n 1 "$REPO/data/feishu_webhook.txt" | tr -d '\r\n')
 fi
+FEISHU_APP_ID="${FEISHU_APP_ID:-}"
+FEISHU_APP_SECRET="${FEISHU_APP_SECRET:-}"
+FEISHU_CHAT_ID="${FEISHU_CHAT_ID:-oc_453d3784e752918f1b45b8b14df815de}"
+if [[ -z "$FEISHU_APP_ID" || -z "$FEISHU_APP_SECRET" ]]; then
+  if [[ -f "$HOME/.openclaw/openclaw.json" ]]; then
+    read -r FEISHU_APP_ID FEISHU_APP_SECRET <<<"$(python - <<'PY'
+import json, os
+path=os.path.expanduser('~/.openclaw/openclaw.json')
+try:
+    with open(path,'r') as f:
+        data=json.load(f)
+    feishu=data.get('channels',{}).get('feishu',{})
+    app_id=feishu.get('appId','')
+    app_secret=feishu.get('appSecret','')
+    print(f"{app_id}\t{app_secret}")
+except Exception:
+    print("\t")
+PY
+)"
+  fi
+fi
 
 stamp() {
   date "+%Y-%m-%d %H:%M:%S"
@@ -76,13 +97,45 @@ if ! git diff --quiet; then
   git push -u origin auto-fix || true
 fi
 
-# optional: push hourly status to Feishu group via webhook
+# push hourly status to Feishu group (webhook preferred, else app token)
+msg="[ClawBBS Hourly] $(stamp) | $run_status | $counts"
 if [[ -n "$FEISHU_WEBHOOK_URL" ]]; then
-  msg="[ClawBBS Hourly] $(stamp) | $run_status | $counts"
   payload=$(python - <<PY
 import json
 print(json.dumps({"msg_type":"text","content":{"text": "$msg"}}))
 PY
 )
   curl -s -X POST -H 'Content-Type: application/json' -d "$payload" "$FEISHU_WEBHOOK_URL" >/dev/null 2>&1 || true
+elif [[ -n "$FEISHU_APP_ID" && -n "$FEISHU_APP_SECRET" && -n "$FEISHU_CHAT_ID" ]]; then
+  FEISHU_MSG="$msg" FEISHU_APP_ID="$FEISHU_APP_ID" FEISHU_APP_SECRET="$FEISHU_APP_SECRET" FEISHU_CHAT_ID="$FEISHU_CHAT_ID" python - <<'PY' || true
+import json, os, urllib.request
+app_id=os.environ.get('FEISHU_APP_ID','')
+app_secret=os.environ.get('FEISHU_APP_SECRET','')
+chat_id=os.environ.get('FEISHU_CHAT_ID','')
+msg=os.environ.get('FEISHU_MSG','')
+if not (app_id and app_secret and chat_id and msg):
+    raise SystemExit(0)
+# tenant token
+data=json.dumps({"app_id": app_id, "app_secret": app_secret}).encode('utf-8')
+req=urllib.request.Request(
+    "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+    data=data,
+    headers={"Content-Type":"application/json"},
+)
+resp=json.loads(urllib.request.urlopen(req, timeout=10).read().decode('utf-8'))
+token=resp.get('tenant_access_token')
+if not token:
+    raise SystemExit(0)
+body={
+    "receive_id": chat_id,
+    "msg_type": "text",
+    "content": json.dumps({"text": msg})
+}
+req=urllib.request.Request(
+    "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+    data=json.dumps(body).encode('utf-8'),
+    headers={"Content-Type":"application/json","Authorization": f"Bearer {token}"},
+)
+urllib.request.urlopen(req, timeout=10).read()
+PY
 fi
