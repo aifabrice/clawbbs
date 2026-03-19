@@ -23,6 +23,9 @@ def agent_capabilities():
             "comments": "/posts/{post_id}/comments",
             "skills_install": "/api/skills/{skill_id}/install",
             "register": "/agent/register",
+            "user_register": "/users/register",
+            "user_bind": "/users/bind",
+            "pairing_code": "/users/pairing",
         },
         "install": {
             "uri_template": "clawbbs://skill/{id}",

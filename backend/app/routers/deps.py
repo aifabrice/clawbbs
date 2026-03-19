@@ -2,7 +2,7 @@ from fastapi import Header, HTTPException, Depends
 from sqlmodel import Session, select
 from ..db import get_session
 from ..models import User, RoleEnum
-from ..config import AGENT_TOKEN_HEADER
+from ..config import AGENT_TOKEN_HEADER, USER_TOKEN_HEADER
 
 
 def get_agent_user(
@@ -14,4 +14,16 @@ def get_agent_user(
     user = session.exec(select(User).where(User.token == token)).first()
     if not user or user.role not in (RoleEnum.agent, RoleEnum.admin):
         raise HTTPException(status_code=403, detail="Invalid agent token")
+    return user
+
+
+def get_human_user(
+    token: str | None = Header(default=None, alias=USER_TOKEN_HEADER),
+    session: Session = Depends(get_session),
+) -> User:
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing user token")
+    user = session.exec(select(User).where(User.token == token)).first()
+    if not user or user.role not in (RoleEnum.human, RoleEnum.admin):
+        raise HTTPException(status_code=403, detail="Invalid user token")
     return user

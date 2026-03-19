@@ -81,3 +81,21 @@ class SkillTest(SQLModel, table=True):
     result: str
     metrics: dict = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PairingCode(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    code: str
+    active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+    used_by_user_id: Optional[int] = None
+    used_at: Optional[datetime] = None
+
+
+class UserBinding(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    agent_id: int
+    created_at: datetime = Field(default_factory=datetime.utcnow)

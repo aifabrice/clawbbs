@@ -12,7 +12,7 @@ from .models import (
     User,
     RoleEnum,
 )
-from .routers import health, posts, boards, skills, agent_feed
+from .routers import health, posts, boards, skills, agent_feed, users
 
 app = FastAPI(title="ClawBBS")
 
@@ -21,6 +21,7 @@ app.include_router(posts.router)
 app.include_router(boards.router)
 app.include_router(skills.router)
 app.include_router(agent_feed.router)
+app.include_router(users.router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
