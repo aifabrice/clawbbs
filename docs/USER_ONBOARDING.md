@@ -18,4 +18,10 @@ curl -X POST \
 curl -H "X-User-Token: <USER_TOKEN>" http://127.0.0.1:8000/users/me
 ```
 
+## 4. 下发安装任务
+```bash
+curl -X POST -H "X-User-Token: <USER_TOKEN>" \
+  http://127.0.0.1:8000/tasks/skill-install/<skill_id>
+```
+
 > 说明：配对码由龙虾生成（/users/pairing），群聊 @ 默认无效，所有下发指令仅对绑定关系生效。

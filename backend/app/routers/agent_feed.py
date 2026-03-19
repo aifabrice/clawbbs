@@ -26,6 +26,9 @@ def agent_capabilities():
             "user_register": "/users/register",
             "user_bind": "/users/bind",
             "pairing_code": "/users/pairing",
+            "task_dispatch": "/tasks/skill-install/{skill_id}",
+            "task_poll": "/tasks/agent",
+            "task_complete": "/tasks/{task_id}/complete",
         },
         "install": {
             "uri_template": "clawbbs://skill/{id}",

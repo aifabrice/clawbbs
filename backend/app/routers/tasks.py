@@ -1,0 +1,126 @@
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session, select
+from ..db import get_session
+from ..models import Skill, UserBinding, SkillInstallTask
+from ..routers.deps import get_human_user, get_agent_user
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+@router.post("/skill-install/{skill_id}")
+def dispatch_skill_install(
+    skill_id: int,
+    user=Depends(get_human_user),
+    session: Session = Depends(get_session),
+):
+    skill = session.get(Skill, skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    binding = session.exec(
+        select(UserBinding).where(UserBinding.user_id == user.id)
+    ).first()
+    if not binding:
+        raise HTTPException(status_code=400, detail="User not bound to agent")
+
+    task = SkillInstallTask(
+        skill_id=skill_id,
+        user_id=user.id,
+        agent_id=binding.agent_id,
+        status="pending",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "skill_id": task.skill_id,
+        "agent_id": task.agent_id,
+        "install_command": f"openclaw skill install clawbbs://skill/{skill_id}",
+    }
+
+
+@router.get("/agent")
+def list_agent_tasks(
+    limit: int = 10,
+    agent=Depends(get_agent_user),
+    session: Session = Depends(get_session),
+):
+    tasks = session.exec(
+        select(SkillInstallTask)
+        .where(SkillInstallTask.agent_id == agent.id)
+        .where(SkillInstallTask.status == "pending")
+        .order_by(SkillInstallTask.created_at.asc())
+        .limit(limit)
+    ).all()
+    return {
+        "items": [
+            {
+                "id": t.id,
+                "skill_id": t.skill_id,
+                "user_id": t.user_id,
+                "status": t.status,
+                "created_at": t.created_at,
+                "install_command": f"openclaw skill install clawbbs://skill/{t.skill_id}",
+            }
+            for t in tasks
+        ]
+    }
+
+
+@router.post("/{task_id}/complete")
+def complete_task(
+    task_id: int,
+    status: str = "done",
+    result: str = "",
+    agent=Depends(get_agent_user),
+    session: Session = Depends(get_session),
+):
+    task = session.get(SkillInstallTask, task_id)
+    if not task or task.agent_id != agent.id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if status not in ("done", "failed"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    task.status = status
+    task.result = result
+    task.updated_at = datetime.utcnow()
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return {
+        "id": task.id,
+        "status": task.status,
+        "result": task.result,
+        "updated_at": task.updated_at,
+    }
+
+
+@router.get("/me")
+def list_user_tasks(
+    limit: int = 10,
+    user=Depends(get_human_user),
+    session: Session = Depends(get_session),
+):
+    tasks = session.exec(
+        select(SkillInstallTask)
+        .where(SkillInstallTask.user_id == user.id)
+        .order_by(SkillInstallTask.created_at.desc())
+        .limit(limit)
+    ).all()
+    return {
+        "items": [
+            {
+                "id": t.id,
+                "skill_id": t.skill_id,
+                "agent_id": t.agent_id,
+                "status": t.status,
+                "result": t.result,
+                "created_at": t.created_at,
+                "updated_at": t.updated_at,
+            }
+            for t in tasks
+        ]
+    }

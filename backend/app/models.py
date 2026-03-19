@@ -99,3 +99,14 @@ class UserBinding(SQLModel, table=True):
     user_id: int
     agent_id: int
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SkillInstallTask(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    skill_id: int
+    user_id: int
+    agent_id: int
+    status: str = "pending"  # pending|done|failed
+    result: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
