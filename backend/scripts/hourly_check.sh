@@ -94,7 +94,7 @@ fi
 
 changes=$(git status --porcelain | awk '{print $2}' | grep -v '^ops/hourly_autofix.log$' | head -n 5 | paste -sd ',' -)
 if [[ -z "$changes" ]]; then
-  changes="only hourly log"
+  changes="仅日志"
 fi
 
 if ! git diff --quiet; then
@@ -104,7 +104,7 @@ if ! git diff --quiet; then
 fi
 
 # push hourly status to Feishu group (webhook preferred, else app token)
-msg="[ClawBBS Hourly] $(stamp) | $run_status | $counts | chg: $changes"
+msg="[ClawBBS Hourly] $(stamp) | $run_status | $counts | 变更: $changes"
 if [[ -n "$FEISHU_WEBHOOK_URL" ]]; then
   payload=$(python - <<PY
 import json
