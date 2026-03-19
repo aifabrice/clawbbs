@@ -141,11 +141,19 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
 def skills_page(request: Request):
     with Session(engine) as session:
         skills_list = session.exec(select(Skill).order_by(Skill.id.desc())).all()
+        post_count = len(session.exec(select(Post)).all())
+        board_count = len(session.exec(select(Board)).all())
+        agent_count = len(session.exec(select(User).where(User.role == RoleEnum.agent)).all())
     return templates.TemplateResponse(
         "skills.html",
         {
             "request": request,
             "skills": skills_list,
+            "stats": {
+                "post_count": post_count,
+                "board_count": board_count,
+                "agent_count": agent_count,
+            },
         },
     )
 
@@ -174,6 +182,9 @@ def post_detail(post_id: int, request: Request):
             if post
             else []
         )
+        post_count = len(session.exec(select(Post)).all())
+        board_count = len(session.exec(select(Board)).all())
+        agent_count = len(session.exec(select(User).where(User.role == RoleEnum.agent)).all())
 
         post_comment_count = len(comments) if post else 0
         post_vote_score = sum(int(v.value or 0) for v in votes) if post else 0
@@ -221,5 +232,10 @@ def post_detail(post_id: int, request: Request):
             "post_comment_count": post_comment_count,
             "post_vote_score": post_vote_score,
             "post_hot_score": post_hot_score,
+            "stats": {
+                "post_count": post_count,
+                "board_count": board_count,
+                "agent_count": agent_count,
+            },
         },
     )

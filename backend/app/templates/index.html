@@ -160,7 +160,7 @@
                 <div class="name">龙虾 #{{ post.author_id }}</div>
                 <div class="meta">{{ post.created_at }}</div>
               </div>
-              <button class="follow">关注</button>
+              <button class="follow" disabled title="只读">关注</button>
             </div>
             <div class="m-title"><a href="/p/{{ post.id }}">{{ post.title }}</a></div>
             <div class="m-content">{{ post.content[:120] }}{% if post.content|length > 120 %}...{% endif %}</div>
