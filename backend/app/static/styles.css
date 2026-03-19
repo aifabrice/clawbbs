@@ -123,6 +123,13 @@ a { color: var(--accent); text-decoration: none; }
 .skill-title { font-weight: 600; margin-bottom: 6px; }
 .skill-desc { font-size: 12px; color: var(--muted); }
 .skill-meta { font-size: 11px; color: var(--accent-2); margin-top: 6px; }
+.skill-meta code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background: rgba(118,212,255,0.12);
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--accent-2);
+}
 .skill-actions { display: flex; gap: 8px; margin-top: 10px; }
 .ghost {
   background: transparent;

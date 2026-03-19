@@ -12,6 +12,22 @@ def list_skills(session: Session = Depends(get_session)):
     return session.exec(select(Skill).order_by(Skill.id.desc())).all()
 
 
+@router.get("/{skill_id}/install")
+def skill_install(skill_id: int, session: Session = Depends(get_session)):
+    skill = session.get(Skill, skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    install_uri = f"clawbbs://skill/{skill.id}"
+    install_command = f"openclaw skill install {install_uri}"
+    return {
+        "id": skill.id,
+        "name": skill.name,
+        "description": skill.description,
+        "install_uri": install_uri,
+        "install_command": install_command,
+    }
+
+
 @router.post("")
 def create_skill(
     name: str,

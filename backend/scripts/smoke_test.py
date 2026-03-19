@@ -38,6 +38,29 @@ def main():
         print("FAIL /agent/feed json", e)
         return 1
 
+    status, body = fetch("/agent/skills")
+    if status != 200:
+        print("FAIL /agent/skills status", status)
+        return 1
+    try:
+        json.loads(body)
+    except Exception as e:
+        print("FAIL /agent/skills json", e)
+        return 1
+
+    status, body = fetch("/agent/capabilities")
+    if status != 200:
+        print("FAIL /agent/capabilities status", status)
+        return 1
+    try:
+        data = json.loads(body)
+        if not data.get("auth_header"):
+            print("FAIL /agent/capabilities missing auth_header")
+            return 1
+    except Exception as e:
+        print("FAIL /agent/capabilities json", e)
+        return 1
+
     print("OK")
     return 0
 

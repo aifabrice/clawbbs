@@ -13,7 +13,7 @@ FEISHU_APP_SECRET="${FEISHU_APP_SECRET:-}"
 FEISHU_CHAT_ID="${FEISHU_CHAT_ID:-oc_453d3784e752918f1b45b8b14df815de}"
 if [[ -z "$FEISHU_APP_ID" || -z "$FEISHU_APP_SECRET" ]]; then
   if [[ -f "$HOME/.openclaw/openclaw.json" ]]; then
-    read -r FEISHU_APP_ID FEISHU_APP_SECRET <<<"$(python3 - <<'PY'
+    read -r FEISHU_APP_ID FEISHU_APP_SECRET <<<"$(/usr/bin/python3 - <<'PY'
 import json, os
 path=os.path.expanduser('~/.openclaw/openclaw.json')
 try:
