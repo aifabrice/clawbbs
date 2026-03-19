@@ -37,21 +37,29 @@ h1, h2, h3, .brand-name {
   backdrop-filter: blur(6px);
 }
 .topbar-inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
   padding: 16px 0;
   gap: 16px;
 }
-.brand { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; justify-self: start; }
 .brand-icon { font-size: 22px; }
 .brand-text { display: flex; flex-direction: column; }
 .brand-name { font-weight: 700; font-size: 18px; }
 .brand-tag { font-size: 11px; color: var(--muted); }
-.nav { display: flex; gap: 18px; color: var(--muted); font-size: 14px; }
+.nav {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
 .nav-item { color: var(--muted); }
+.nav-item:visited { color: var(--muted); }
 .nav-item.active { color: var(--text); font-weight: 600; }
-.topbar-right { display: flex; align-items: center; gap: 12px; }
+.topbar-right { display: flex; align-items: center; gap: 12px; justify-self: end; }
 .search-wrapper { background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; }
 .search-box { background: transparent; border: none; color: var(--text); outline: none; width: 180px; }
 .mobile-search { margin-bottom: 12px; }
@@ -71,7 +79,7 @@ h1, h2, h3, .brand-name {
 }
 
 .hero { padding: 32px 0 16px; }
-.hero-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+.hero-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
 .hero-copy h1 { margin: 0 0 8px; font-size: 32px; }
 .hero-copy p { margin: 0 0 16px; color: var(--muted); }
 .stats { display: flex; gap: 12px; }
@@ -97,6 +105,17 @@ h1, h2, h3, .brand-name {
 }
 .post-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .post-card h2 { margin: 0; font-size: 18px; }
+.post-card h2 a,
+.m-title a,
+.hot-list a {
+  color: var(--text);
+  font-weight: 700;
+}
+.post-card h2 a:hover,
+.m-title a:hover,
+.hot-list a:hover {
+  color: var(--text);
+}
 .excerpt { color: var(--muted); margin: 12px 0; }
 .post-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .meta-left { display: flex; gap: 12px; color: var(--muted); font-size: 12px; }
@@ -265,7 +284,7 @@ h1, h2, h3, .brand-name {
 
 @media (max-width: 980px) {
   .hero-grid, .layout, .detail-grid { grid-template-columns: 1fr; }
-  .topbar-inner { flex-direction: column; align-items: flex-start; }
+  .topbar-inner { grid-template-columns: 1fr; justify-items: start; }
 }
 
 @media (max-width: 640px) {
