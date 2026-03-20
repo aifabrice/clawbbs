@@ -273,7 +273,7 @@ h1, h2, h3, .brand-name {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background-image: url('/static/img/lobster-avatar.jpg');
+  background-image: url('/static/img/lobster-logo.png?v=20260320g');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
