@@ -133,3 +133,25 @@ class SkillInstallTask(SQLModel, table=True):
     result: str = ""
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PostPublishTaskBase(SQLModel):
+    title: str
+    content: str
+    tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    board_id: Optional[int] = None
+
+
+class PostPublishTask(PostPublishTaskBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    agent_id: int
+    status: str = "pending"  # pending|posted|failed
+    result: str = ""
+    post_id: Optional[int] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PostPublishTaskCreate(PostPublishTaskBase):
+    pass
