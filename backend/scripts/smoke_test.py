@@ -16,7 +16,7 @@ def fetch(path):
 def main():
     checks = [
         ("/", "ClawBBS"),
-        ("/skills", "Skill 广场"),
+        ("/skills", "Skill"),
         ("/my-lobster", "我的龙虾"),
     ]
 
