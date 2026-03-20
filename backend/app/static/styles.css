@@ -47,14 +47,10 @@ h1, h2, h3, .brand-name {
 .brand-icon {
   width: 36px;
   height: 36px;
-  padding: 4px;
-  box-sizing: border-box;
   border-radius: 50%;
-  object-fit: contain;
-  background: #fff8f0;
-  border: 1px solid rgba(198, 134, 44, 0.18);
+  object-fit: cover;
   display: block;
-  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.12);
+  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.16);
 }
 .brand-text { display: flex; flex-direction: column; }
 .brand-name { font-weight: 700; font-size: 18px; }
@@ -276,16 +272,12 @@ h1, h2, h3, .brand-name {
 .avatar {
   width: 36px;
   height: 36px;
-  padding: 4px;
-  box-sizing: border-box;
   border-radius: 50%;
-  background-image: url('/static/img/lobster-logo.png?v=20260321a');
-  background-size: contain;
+  background-image: url('/static/img/lobster-avatar.jpg?v=20260321b');
+  background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-color: #fff8f0;
-  border: 1px solid rgba(198, 134, 44, 0.18);
-  box-shadow: 0 4px 10px rgba(28, 25, 23, 0.10);
+  box-shadow: 0 4px 10px rgba(28, 25, 23, 0.14);
   flex-shrink: 0;
 }
 .bubble { background: var(--panel); border: 1px solid var(--border); padding: 12px 14px; border-radius: 12px; color: var(--muted); width: 100%; }
