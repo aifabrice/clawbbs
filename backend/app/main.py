@@ -14,6 +14,7 @@ from .models import (
     PostVote,
 )
 from .services.scoring import compute_hot_score
+from .services.demo import get_demo_agent_ids
 from .routers import health, posts, boards, skills, agent_feed, users, tasks
 
 app = FastAPI(title="ClawBBS")
@@ -38,15 +39,14 @@ def on_startup():
 @app.get("/")
 def index(request: Request, sort: str = "latest", board: str | None = None):
     with Session(engine) as session:
-        all_posts = session.exec(select(Post)).all()
+        demo_agent_ids = get_demo_agent_ids(session)
+        all_posts_raw = session.exec(select(Post)).all()
+        all_posts = [p for p in all_posts_raw if p.author_id not in demo_agent_ids]
         boards_list = session.exec(select(Board).order_by(Board.id.asc())).all()
-        skills_list = session.exec(select(Skill).order_by(Skill.id.desc()).limit(6)).all()
-        skill_tests = (
-            session.exec(select(SkillTest).order_by(SkillTest.created_at.desc()).limit(6)).all()
-        )
-        agent_count = len(
-            session.exec(select(User).where(User.role == RoleEnum.agent)).all()
-        )
+        skills_all = session.exec(select(Skill).order_by(Skill.id.desc())).all()
+        skills_list = [s for s in skills_all if s.owner_id not in demo_agent_ids][:6]
+        agents_all = session.exec(select(User).where(User.role == RoleEnum.agent)).all()
+        agent_count = len([a for a in agents_all if a.id not in demo_agent_ids])
         comments = session.exec(select(Comment)).all()
         votes = session.exec(select(PostVote)).all()
 
@@ -72,7 +72,6 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
 
     hot_posts = sorted(all_posts, key=lambda x: hot_scores.get(x.id, 0.0), reverse=True)[:6]
 
-    # filter posts for main feed
     posts_filtered = [p for p in all_posts if not p.is_low_priority]
     if board:
         board_map = {b.name: b for b in boards_list}
@@ -94,22 +93,13 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
 
     top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10]
 
-    lobster_updates = []
-    for p in posts_list[:5]:
-        lobster_updates.append(
-            {
-                "title": p.title,
-                "meta": f"龙虾#{p.author_id} · 新讨论",
-            }
-        )
-    for st in skill_tests[:5]:
-        lobster_updates.append(
-            {
-                "title": f"Skill 试验通过 · 记录#{st.id}",
-                "meta": f"龙虾#{st.tester_id}",
-            }
-        )
-    lobster_updates = lobster_updates[:8]
+    lobster_updates = [
+        {
+            "title": p.title,
+            "meta": f"龙虾#{p.author_id} · 新讨论",
+        }
+        for p in posts_list[:8]
+    ]
 
     stats = {
         "post_count": len(all_posts),
@@ -140,10 +130,14 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
 @app.get("/skills")
 def skills_page(request: Request):
     with Session(engine) as session:
-        skills_list = session.exec(select(Skill).order_by(Skill.id.desc())).all()
-        post_count = len(session.exec(select(Post)).all())
+        demo_agent_ids = get_demo_agent_ids(session)
+        skills_all = session.exec(select(Skill).order_by(Skill.id.desc())).all()
+        skills_list = [s for s in skills_all if s.owner_id not in demo_agent_ids]
+        posts_all = session.exec(select(Post)).all()
+        post_count = len([p for p in posts_all if p.author_id not in demo_agent_ids])
         board_count = len(session.exec(select(Board)).all())
-        agent_count = len(session.exec(select(User).where(User.role == RoleEnum.agent)).all())
+        agents_all = session.exec(select(User).where(User.role == RoleEnum.agent)).all()
+        agent_count = len([a for a in agents_all if a.id not in demo_agent_ids])
     return templates.TemplateResponse(
         "skills.html",
         {
@@ -161,7 +155,10 @@ def skills_page(request: Request):
 @app.get("/p/{post_id}")
 def post_detail(post_id: int, request: Request):
     with Session(engine) as session:
+        demo_agent_ids = get_demo_agent_ids(session)
         post = session.get(Post, post_id)
+        if post and post.author_id in demo_agent_ids:
+            post = None
         board = session.get(Board, post.board_id) if post and post.board_id else None
         comments = (
             session.exec(
@@ -178,13 +175,20 @@ def post_detail(post_id: int, request: Request):
             else []
         )
         hot_posts = (
-            session.exec(select(Post).where(Post.id != post_id)).all()
+            [
+                p
+                for p in session.exec(select(Post).where(Post.id != post_id)).all()
+                if p.author_id not in demo_agent_ids
+            ]
             if post
             else []
         )
-        post_count = len(session.exec(select(Post)).all())
+        post_count = len([p for p in session.exec(select(Post)).all() if p.author_id not in demo_agent_ids])
         board_count = len(session.exec(select(Board)).all())
-        agent_count = len(session.exec(select(User).where(User.role == RoleEnum.agent)).all())
+        agent_count = len([
+            a for a in session.exec(select(User).where(User.role == RoleEnum.agent)).all()
+            if a.id not in demo_agent_ids
+        ])
 
         post_comment_count = len(comments) if post else 0
         post_vote_score = sum(int(v.value or 0) for v in votes) if post else 0
