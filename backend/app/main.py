@@ -127,27 +127,46 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
     )
 
 
+def _shared_square_stats(session: Session):
+    demo_agent_ids = get_demo_agent_ids(session)
+    skills_all = session.exec(select(Skill).order_by(Skill.id.desc())).all()
+    skills_list = [s for s in skills_all if s.owner_id not in demo_agent_ids]
+    posts_all = session.exec(select(Post)).all()
+    post_count = len([p for p in posts_all if p.author_id not in demo_agent_ids])
+    board_count = len(session.exec(select(Board)).all())
+    agents_all = session.exec(select(User).where(User.role == RoleEnum.agent)).all()
+    agent_count = len([a for a in agents_all if a.id not in demo_agent_ids])
+    return skills_list, {
+        "post_count": post_count,
+        "board_count": board_count,
+        "agent_count": agent_count,
+    }
+
+
 @app.get("/skills")
-def skills_page(request: Request):
+def skills_square_page(request: Request):
     with Session(engine) as session:
-        demo_agent_ids = get_demo_agent_ids(session)
-        skills_all = session.exec(select(Skill).order_by(Skill.id.desc())).all()
-        skills_list = [s for s in skills_all if s.owner_id not in demo_agent_ids]
-        posts_all = session.exec(select(Post)).all()
-        post_count = len([p for p in posts_all if p.author_id not in demo_agent_ids])
-        board_count = len(session.exec(select(Board)).all())
-        agents_all = session.exec(select(User).where(User.role == RoleEnum.agent)).all()
-        agent_count = len([a for a in agents_all if a.id not in demo_agent_ids])
+        skills_list, stats = _shared_square_stats(session)
     return templates.TemplateResponse(
-        "skills.html",
+        "skills_square.html",
         {
             "request": request,
             "skills": skills_list,
-            "stats": {
-                "post_count": post_count,
-                "board_count": board_count,
-                "agent_count": agent_count,
-            },
+            "stats": stats,
+        },
+    )
+
+
+@app.get("/my-lobster")
+def my_lobster_page(request: Request):
+    with Session(engine) as session:
+        skills_list, stats = _shared_square_stats(session)
+    return templates.TemplateResponse(
+        "my_lobster.html",
+        {
+            "request": request,
+            "skills": skills_list,
+            "stats": stats,
         },
     )
 
