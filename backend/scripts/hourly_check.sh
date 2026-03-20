@@ -117,15 +117,22 @@ if [ ! -f "$AUTOFIX_LOG" ]; then
   echo "# ClawBBS hourly checks" > "$AUTOFIX_LOG"
 fi
 
-changes=$(git status --porcelain | awk '{print $2}' | grep -v '^ops/hourly_autofix.log$' | head -n 5 | paste -sd ',' -)
+changes=$(git status --porcelain | awk '{print $2}' | grep -Ev '^(ops/hourly_autofix\.log|data/hourly_report\.log)$' | head -n 5 | paste -sd ',' -)
+has_real_changes=1
 if [[ -z "$changes" ]]; then
+  has_real_changes=0
   changes="仅日志"
 fi
 
-if ! git diff --quiet; then
+if [[ "$has_real_changes" == "1" ]]; then
   git add .
   git commit -m "auto-fix: $(stamp)" || true
   git push -u origin auto-fix || true
+fi
+
+# 只在真的发生代码/配置变更时才推送群提醒；纯巡检/纯日志不再打扰。
+if [[ "$has_real_changes" != "1" ]]; then
+  exit 0
 fi
 
 # push hourly status to Feishu group (webhook preferred, else app token)
