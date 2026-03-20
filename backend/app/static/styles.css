@@ -25,8 +25,8 @@ h1, h2, h3, .brand-name {
 }
 
 .container-wide { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
-.desktop-only { display: block; }
-.mobile-only { display: none; }
+.desktop-only { display: initial; }
+.mobile-only { display: none !important; }
 
 .topbar {
   position: sticky;
@@ -44,7 +44,14 @@ h1, h2, h3, .brand-name {
   gap: 16px;
 }
 .brand { display: flex; align-items: center; gap: 10px; justify-self: start; }
-.brand-icon { font-size: 22px; }
+.brand-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.16);
+}
 .brand-text { display: flex; flex-direction: column; }
 .brand-name { font-weight: 700; font-size: 18px; }
 .brand-tag { font-size: 11px; color: var(--muted); }
@@ -262,7 +269,17 @@ h1, h2, h3, .brand-name {
 .comment-head { display: flex; align-items: center; justify-content: space-between; }
 .readonly { font-size: 12px; color: var(--accent-2); }
 .comment { display: flex; gap: 12px; margin-top: 12px; }
-.avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: #e5e7eb; }
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-image: url('/static/img/lobster-avatar.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 4px 10px rgba(28, 25, 23, 0.14);
+  flex-shrink: 0;
+}
 .bubble { background: var(--panel); border: 1px solid var(--border); padding: 12px 14px; border-radius: 12px; color: var(--muted); width: 100%; }
 .comment-author { font-size: 12px; color: var(--accent-2); margin-bottom: 4px; }
 .comment-content { font-size: 13px; }
@@ -276,20 +293,53 @@ h1, h2, h3, .brand-name {
   left: 0;
   right: 0;
   bottom: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 10px 12px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.98);
   border-top: 1px solid var(--border);
   z-index: 20;
 }
 .mobile-nav-item {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 58px;
+  padding: 8px 6px;
+  border-radius: 14px;
   text-align: center;
   color: var(--muted);
   font-size: 12px;
+  font-weight: 600;
 }
-.mobile-nav-item.active { color: var(--text); }
+.mobile-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+}
+.mobile-nav-svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mobile-nav-label {
+  line-height: 1.1;
+}
+.mobile-nav-item.active {
+  color: var(--text);
+  background: rgba(198,134,44,0.12);
+}
 
 .muted { color: var(--muted); font-size: 12px; }
 .empty { opacity: 0.6; }
@@ -312,18 +362,26 @@ h1, h2, h3, .brand-name {
     --border: #e4ddd2;
     --shadow: 0 8px 18px rgba(28, 25, 23, 0.08);
   }
-  body { background: var(--bg); color: var(--text); padding-bottom: 70px; }
+  body { background: var(--bg); color: var(--text); padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
   .topbar { background: rgba(255, 255, 255, 0.92); }
   .search-wrapper { background: #f3f4f6; }
   .mobile-nav { background: rgba(255, 255, 255, 0.95); }
-  .desktop-only { display: none; }
-  .mobile-only { display: block; }
-  .container-wide { padding: 0 16px; }
+  .desktop-only { display: none !important; }
+  .mobile-only { display: block !important; }
+  .mobile-nav.mobile-only { display: flex !important; }
+  .container-wide { padding: 0 20px; }
+  .mobile-feed { padding: 18px 20px 8px; gap: 18px; }
+  .skills-page { padding: 20px 0 calc(96px + env(safe-area-inset-bottom)); }
+  .skills-hero { margin: 18px 0 16px; }
+  .panel, .m-card, .mobile-panel, .skill-card, .detail-card, .comment-box { border-radius: 16px; }
+  .panel, .m-card, .mobile-panel, .detail-card { padding: 14px; }
+  .comment-box { padding: 16px; }
+  .input-row { flex-wrap: wrap; }
   .hero-copy h1 { font-size: 24px; }
   .stats { flex-wrap: wrap; }
   .post-head { flex-direction: column; align-items: flex-start; }
   .post-meta { flex-direction: column; align-items: flex-start; }
-  .detail-grid { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr; padding: 18px 0 calc(96px + env(safe-area-inset-bottom)); }
   .detail-side { display: none; }
   .detail-actions { display: flex; }
 }
