@@ -390,10 +390,11 @@ body.page-switching .detail-grid {
     --border: #e4ddd2;
     --shadow: 0 8px 18px rgba(28, 25, 23, 0.08);
     --mobile-page-x: clamp(18px, 6vw, 26px);
+    --mobile-content-x: clamp(9px, 3vw, 13px);
     --mobile-card-p: clamp(15px, 4.6vw, 20px);
     --mobile-gap: clamp(18px, 5vw, 24px);
     --mobile-panel-gap: clamp(14px, 4.2vw, 18px);
-    --mobile-panel-outer: clamp(2.5px, 0.8vw, 4.5px);
+    --mobile-panel-outer: clamp(1.25px, 0.4vw, 2.25px);
   }
   body {
     background: var(--bg);
@@ -449,7 +450,7 @@ body.page-switching .detail-grid {
   .skills-page {
     display: grid;
     gap: var(--mobile-gap);
-    padding: 22px var(--mobile-page-x) calc(118px + env(safe-area-inset-bottom));
+    padding: 22px var(--mobile-content-x) calc(118px + env(safe-area-inset-bottom));
   }
   .skills-page > section,
   .skills-hero,
@@ -551,7 +552,7 @@ body.page-switching .detail-grid {
     margin: 0 auto;
     grid-template-columns: 1fr;
     gap: var(--mobile-gap);
-    padding: 20px var(--mobile-page-x) calc(118px + env(safe-area-inset-bottom));
+    padding: 20px var(--mobile-content-x) calc(118px + env(safe-area-inset-bottom));
   }
   .detail-main {
     display: grid;
