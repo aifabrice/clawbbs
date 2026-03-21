@@ -8,6 +8,7 @@
   const SEARCH_RESTORE_URL_KEY = "clawbbs_search_restore_url";
   let homeFeedObserver = null;
   let navTrackingPointerId = null;
+  let pendingSearchContext = null;
 
   function normalizeUrl(input) {
     try {
@@ -134,6 +135,29 @@
     });
   }
 
+  function restoreSearchContext() {
+    const context = pendingSearchContext;
+    pendingSearchContext = null;
+    if (!context) return;
+
+    const form = document.querySelector("[data-search-form]");
+    const input = form?.querySelector("[data-search-input]");
+    if (!form || !input) return;
+
+    setSearchShellState(form, true);
+    input.value = context.value || "";
+    if (!context.focused) return;
+
+    window.requestAnimationFrame(() => {
+      input.focus({ preventScroll: true });
+      const end = typeof context.selectionEnd === "number" ? context.selectionEnd : input.value.length;
+      const start = typeof context.selectionStart === "number" ? context.selectionStart : end;
+      try {
+        input.setSelectionRange(start, end);
+      } catch {}
+    });
+  }
+
   function applyDocument(html, url, replace = false) {
     const nextDoc = new DOMParser().parseFromString(html, "text/html");
     if (!nextDoc || !nextDoc.body) {
@@ -154,9 +178,10 @@
     clearPendingActive();
     setSwitchingState(false);
     initPageFeatures();
+    restoreSearchContext();
   }
 
-  function navigateInstant(url, clickedAnchor) {
+  function navigateInstant(url, clickedAnchor, options = {}) {
     if (isSameDocumentHashNavigation(url)) {
       window.location.href = url.href;
       return;
@@ -171,12 +196,28 @@
       return;
     }
 
+    if (options.preserveSearch && clickedAnchor == null) {
+      const form = document.querySelector("[data-search-form]");
+      const input = form?.querySelector("[data-search-input]");
+      if (form && input) {
+        pendingSearchContext = {
+          value: input.value,
+          focused: document.activeElement === input,
+          selectionStart: input.selectionStart,
+          selectionEnd: input.selectionEnd,
+        };
+      }
+    } else {
+      pendingSearchContext = null;
+    }
+
     markImmediateActive(url.href, clickedAnchor);
     setSwitchingState(true);
 
     fetchPage(url)
-      .then((html) => applyDocument(html, url, false))
+      .then((html) => applyDocument(html, url, Boolean(options.replaceHistory)))
       .catch(() => {
+        pendingSearchContext = null;
         window.location.href = url.href;
       });
   }
@@ -321,7 +362,7 @@
     homeFeedObserver.observe(sentinel);
   }
 
-  function submitSearchForm(form, rawValue) {
+  function submitSearchForm(form, rawValue, options = {}) {
     const action = form.getAttribute("action") || "/";
     const url = new URL(action, window.location.origin);
     const current = new URL(window.location.href);
@@ -331,11 +372,11 @@
     if (!value) {
       if (restoreUrl) {
         sessionStorage.removeItem(SEARCH_RESTORE_URL_KEY);
-        navigateInstant(new URL(restoreUrl, window.location.origin), null);
+        navigateInstant(new URL(restoreUrl, window.location.origin), null, options);
         return;
       }
       current.searchParams.delete("q");
-      navigateInstant(current, null);
+      navigateInstant(current, null, options);
       return;
     }
 
@@ -343,7 +384,7 @@
       sessionStorage.setItem(SEARCH_RESTORE_URL_KEY, current.href);
     }
     url.searchParams.set("q", value);
-    navigateInstant(url, null);
+    navigateInstant(url, null, options);
   }
 
   function setSearchShellState(form, open) {
@@ -386,13 +427,13 @@
         const restoreUrl = sessionStorage.getItem(SEARCH_RESTORE_URL_KEY) || "";
         sessionStorage.removeItem(SEARCH_RESTORE_URL_KEY);
         if (restoreUrl && restoreUrl !== window.location.href) {
-          navigateInstant(new URL(restoreUrl, window.location.origin), null);
+          navigateInstant(new URL(restoreUrl, window.location.origin), null, { replaceHistory: true });
           return;
         }
         const fallback = new URL(window.location.href);
         if (fallback.searchParams.get("q")) {
           fallback.searchParams.delete("q");
-          navigateInstant(fallback, null);
+          navigateInstant(fallback, null, { replaceHistory: true });
           return;
         }
         toggle.focus();
@@ -405,7 +446,7 @@
         const currentValue = new URL(window.location.href).searchParams.get("q") || "";
         if (nextValue === currentValue.trim()) return;
         debounceTimer = window.setTimeout(() => {
-          submitSearchForm(form, nextValue);
+          submitSearchForm(form, nextValue, { preserveSearch: true, replaceHistory: true });
         }, 500);
       };
 
@@ -420,7 +461,7 @@
         }
         input.focus();
         if (input.value.trim()) {
-          submitSearchForm(form, input.value);
+          submitSearchForm(form, input.value, { preserveSearch: true, replaceHistory: true });
         }
       });
 
@@ -432,7 +473,7 @@
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         clearAutoSearch();
-        submitSearchForm(form, input.value);
+        submitSearchForm(form, input.value, { preserveSearch: true, replaceHistory: true });
       });
 
       input.addEventListener("compositionstart", () => {
