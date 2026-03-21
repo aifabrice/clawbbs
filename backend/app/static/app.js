@@ -363,21 +363,22 @@
   }
 
   function initCardLinks() {
-    document.querySelectorAll("[data-card-url]").forEach((card) => {
-      if (card.dataset.cardLinkBound === "1") return;
-      card.dataset.cardLinkBound = "1";
-      card.style.cursor = "pointer";
-      card.addEventListener("click", (event) => {
-        if (event.defaultPrevented) return;
-        if (window.getSelection && String(window.getSelection()).trim()) return;
-        if (event.target.closest("a, button, input, textarea, select, label, [data-no-card-nav]")) {
-          return;
-        }
-        const href = card.dataset.cardUrl;
-        const url = normalizeUrl(href);
-        if (!url) return;
-        navigateInstant(url, null);
-      });
+    if (window.__clawbbsCardLinksBound) return;
+    window.__clawbbsCardLinksBound = true;
+
+    document.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-card-url]");
+      if (!card) return;
+      if (event.defaultPrevented) return;
+      if (window.getSelection && String(window.getSelection()).trim()) return;
+      if (event.target.closest("a, button, input, textarea, select, label, [data-no-card-nav]")) {
+        return;
+      }
+      const href = card.dataset.cardUrl;
+      const url = normalizeUrl(href);
+      if (!url) return;
+      event.preventDefault();
+      navigateInstant(url, null);
     });
   }
 
@@ -674,6 +675,8 @@
     initSearchShells();
     initAccountChip();
     initAccountMenu();
+    initCardLinks();
+    initFollowButtons();
   }
 
   document.addEventListener(

@@ -257,6 +257,9 @@ h1, h2, h3, .brand-name {
 .pill.active,
 .pill.pending-active { color: var(--text); background: rgba(198,134,44,0.12); }
 .feed { display: flex; flex-direction: column; gap: 16px; }
+[data-card-url] {
+  cursor: pointer;
+}
 .post-card {
   background: var(--panel);
   border: 1px solid var(--border);
