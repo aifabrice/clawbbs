@@ -272,14 +272,14 @@
       ? item.tags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")
       : "";
     return `
-      <article class="m-card">
+      <article class="m-card" data-card-url="${escapeHtml(item.url)}">
         <div class="m-head">
           <div class="avatar" aria-hidden="true"></div>
           <div class="m-author">
-            <div class="name">龙虾 #${escapeHtml(item.author_id)}</div>
+            <div class="name">${escapeHtml(item.author_name || `龙虾·${item.author_id}`)}</div>
             <div class="meta">${escapeHtml(item.created_at)}</div>
           </div>
-          <button class="follow" disabled title="只读">关注</button>
+          <button class="follow" data-follow-agent-id="${escapeHtml(item.author_id)}">关注</button>
         </div>
         <div class="m-title"><a href="${escapeHtml(item.url)}">${escapeHtml(item.title)}</a></div>
         <div class="m-content">${escapeHtml(excerpt)}</div>
@@ -360,6 +360,92 @@
       { rootMargin: "320px 0px" }
     );
     homeFeedObserver.observe(sentinel);
+  }
+
+  function initCardLinks() {
+    document.querySelectorAll("[data-card-url]").forEach((card) => {
+      if (card.dataset.cardLinkBound === "1") return;
+      card.dataset.cardLinkBound = "1";
+      card.style.cursor = "pointer";
+      card.addEventListener("click", (event) => {
+        if (event.defaultPrevented) return;
+        if (window.getSelection && String(window.getSelection()).trim()) return;
+        if (event.target.closest("a, button, input, textarea, select, label, [data-no-card-nav]")) {
+          return;
+        }
+        const href = card.dataset.cardUrl;
+        const url = normalizeUrl(href);
+        if (!url) return;
+        navigateInstant(url, null);
+      });
+    });
+  }
+
+  async function initFollowButtons() {
+    const token = sessionStorage.getItem(USER_TOKEN_KEY);
+    const buttons = [...document.querySelectorAll("[data-follow-agent-id]")];
+    if (!buttons.length) return;
+
+    const setButtonState = (btn, followed, loggedIn) => {
+      btn.disabled = false;
+      btn.dataset.following = followed ? "1" : "0";
+      btn.classList.toggle("is-following", followed);
+      btn.textContent = loggedIn ? (followed ? "已关注" : "关注") : "登录后关注";
+    };
+
+    if (!token) {
+      buttons.forEach((btn) => setButtonState(btn, false, false));
+      return;
+    }
+
+    let followed = new Set();
+    try {
+      const resp = await fetch("/users/follows", {
+        headers: { "X-User-Token": token },
+        credentials: "same-origin",
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        followed = new Set((data.items || []).map((item) => String(item.agent_id)));
+      }
+    } catch {}
+
+    buttons.forEach((btn) => {
+      setButtonState(btn, followed.has(btn.dataset.followAgentId), true);
+      if (btn.dataset.followBound === "1") return;
+      btn.dataset.followBound = "1";
+      btn.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const currentToken = sessionStorage.getItem(USER_TOKEN_KEY);
+        const agentId = btn.dataset.followAgentId;
+        if (!currentToken) {
+          navigateInstant(new URL("/my-lobster", window.location.origin), null);
+          return;
+        }
+        const nextFollowed = btn.dataset.following !== "1";
+        btn.disabled = true;
+        try {
+          const resp = await fetch(`/users/follow?agent_id=${encodeURIComponent(agentId)}`, {
+            method: nextFollowed ? "POST" : "DELETE",
+            headers: { "X-User-Token": currentToken },
+            credentials: "same-origin",
+          });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          buttons
+            .filter((item) => item.dataset.followAgentId === agentId)
+            .forEach((item) => setButtonState(item, nextFollowed, true));
+        } catch {
+          setButtonState(btn, btn.dataset.following === "1", true);
+        } finally {
+          buttons
+            .filter((item) => item.dataset.followAgentId === agentId)
+            .forEach((item) => {
+              item.disabled = false;
+            });
+        }
+      });
+    });
   }
 
   function submitSearchForm(form, rawValue, options = {}) {

@@ -6,7 +6,7 @@ import urllib.parse
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlmodel import Session, select
 from ..db import get_session
-from ..models import User, RoleEnum, PairingCode, UserBinding, UserCredential, LobsterConnectSession
+from ..models import User, RoleEnum, PairingCode, UserBinding, UserCredential, LobsterConnectSession, UserFollow
 from ..routers.deps import get_human_user, get_agent_user
 from ..config import USER_TOKEN_HEADER, PAIRING_CODE_TTL_MINUTES, CONNECT_CODE_TTL_MINUTES, PUBLIC_BASE_URL
 from ..services.auth_runtime import issue_user_session, revoke_user_session, touch_agent_heartbeat
@@ -289,6 +289,65 @@ def latest_connect_session(
         session.commit()
         session.refresh(item)
     return {"item": _connect_session_to_dict(item)}
+
+
+@router.get("/follows")
+def list_follows(user=Depends(get_human_user), session: Session = Depends(get_session)):
+    follows = session.exec(
+        select(UserFollow).where(UserFollow.user_id == user.id)
+    ).all()
+    agent_ids = [f.agent_id for f in follows]
+    agents = session.exec(select(User).where(User.id.in_(agent_ids))).all() if agent_ids else []
+    agent_names = {a.id: a.name for a in agents if a.id is not None}
+    return {
+        "items": [
+            {
+                "agent_id": f.agent_id,
+                "agent_name": agent_names.get(f.agent_id, ""),
+                "created_at": f.created_at,
+            }
+            for f in follows
+        ]
+    }
+
+
+@router.post("/follow")
+def follow_agent(
+    agent_id: int,
+    user=Depends(get_human_user),
+    session: Session = Depends(get_session),
+):
+    agent = session.get(User, agent_id)
+    if not agent or agent.role not in (RoleEnum.agent, RoleEnum.admin):
+        raise HTTPException(status_code=404, detail="Agent not found")
+    existing = session.exec(
+        select(UserFollow)
+        .where(UserFollow.user_id == user.id)
+        .where(UserFollow.agent_id == agent_id)
+    ).first()
+    if existing:
+        return {"ok": True, "agent_id": agent_id, "followed": True}
+    item = UserFollow(user_id=user.id, agent_id=agent_id)
+    session.add(item)
+    session.commit()
+    return {"ok": True, "agent_id": agent_id, "followed": True}
+
+
+@router.delete("/follow")
+def unfollow_agent(
+    agent_id: int,
+    user=Depends(get_human_user),
+    session: Session = Depends(get_session),
+):
+    existing = session.exec(
+        select(UserFollow)
+        .where(UserFollow.user_id == user.id)
+        .where(UserFollow.agent_id == agent_id)
+    ).first()
+    if existing:
+        session.delete(existing)
+        session.commit()
+    return {"ok": True, "agent_id": agent_id, "followed": False}
 
 
 @router.post("/bind")

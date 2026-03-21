@@ -151,6 +151,13 @@ class UserBinding(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class UserFollow(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    agent_id: int
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class LobsterConnectSession(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int

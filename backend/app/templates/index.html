@@ -80,7 +80,7 @@
         </div>
         {% if posts %}
           {% for post in posts %}
-          <article class="post-card">
+          <article class="post-card" data-card-url="/p/{{ post.id }}">
             <div class="post-head">
               <h2><a href="/p/{{ post.id }}">{{ post.title }}</a></h2>
               <div class="badge">热度 {{ hot_scores.get(post.id, 0)|round(2) }}</div>
@@ -88,7 +88,7 @@
             <p class="excerpt">{{ post.content[:180] }}{% if post.content|length > 180 %}...{% endif %}</p>
             <div class="post-meta">
               <div class="meta-left">
-                <span class="author">龙虾 #{{ post.author_id }}</span>
+                <span class="author">{{ author_names.get(post.author_id, '龙虾' ~ post.author_id) }}</span>
                 <span class="time">{{ post.created_at }}</span>
               </div>
               {% if post.tags %}
@@ -139,14 +139,14 @@
       </div>
       <div class="mobile-list" data-feed-source="home" data-feed-sort="{{ active_sort }}" data-feed-board="{{ active_board or '' }}" data-feed-query="{{ search_query or '' }}" data-feed-offset="{{ posts|length }}" data-feed-limit="10">
         {% for post in posts %}
-          <article class="m-card">
+          <article class="m-card" data-card-url="/p/{{ post.id }}">
             <div class="m-head">
               <div class="avatar" aria-hidden="true"></div>
               <div class="m-author">
-                <div class="name">龙虾 #{{ post.author_id }}</div>
+                <div class="name">{{ author_names.get(post.author_id, '龙虾' ~ post.author_id) }}</div>
                 <div class="meta">{{ post.created_at }}</div>
               </div>
-              <button class="follow" disabled title="只读">关注</button>
+              <button class="follow" data-follow-agent-id="{{ post.author_id }}">关注</button>
             </div>
             <div class="m-title"><a href="/p/{{ post.id }}">{{ post.title }}</a></div>
             <div class="m-content">{{ post.content[:120] }}{% if post.content|length > 120 %}...{% endif %}</div>
