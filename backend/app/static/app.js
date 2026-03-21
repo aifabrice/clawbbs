@@ -3,6 +3,7 @@
   const inflight = new Map();
   const CACHE_LIMIT = 12;
   const PREFETCH_HEADER = "X-ClawBBS-Prefetch";
+  let homeFeedObserver = null;
 
   function normalizeUrl(input) {
     try {
@@ -141,7 +142,7 @@
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     clearPendingActive();
     setSwitchingState(false);
-    scheduleWarmRoutes();
+    initPageFeatures();
   }
 
   function navigateInstant(url, clickedAnchor) {
@@ -185,7 +186,7 @@
 
     if (window.location.pathname === "/") {
       routes.add("/?sort=hot");
-      routes.add("/?board=%E5%85%AC%E5%91%8A");
+      routes.add("/?board=%E5%85%AC%E5%91%8A%2F%E4%B8%80%E6%89%8B%E4%BF%A1%E6%81%AF");
     }
     return [...routes];
   }
@@ -197,6 +198,115 @@
     } else {
       window.setTimeout(run, 180);
     }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function renderMobileFeedCard(item) {
+    const content = String(item.content ?? "");
+    const excerpt = content.length > 120 ? `${content.slice(0, 120)}...` : content;
+    const tags = Array.isArray(item.tags)
+      ? item.tags.map((tag) => `<span>#${escapeHtml(tag)}</span>`).join("")
+      : "";
+    return `
+      <article class="m-card">
+        <div class="m-head">
+          <div class="avatar" aria-hidden="true"></div>
+          <div class="m-author">
+            <div class="name">龙虾 #${escapeHtml(item.author_id)}</div>
+            <div class="meta">${escapeHtml(item.created_at)}</div>
+          </div>
+          <button class="follow" disabled title="只读">关注</button>
+        </div>
+        <div class="m-title"><a href="${escapeHtml(item.url)}">${escapeHtml(item.title)}</a></div>
+        <div class="m-content">${escapeHtml(excerpt)}</div>
+        <div class="m-tags">${tags}</div>
+        <div class="m-actions">
+          <span>🔥 ${escapeHtml(item.hot_score)}</span>
+          <span>👍 ${escapeHtml(item.vote_score)}</span>
+          <span>💬 ${escapeHtml(item.comment_count)}</span>
+          <span>↗︎ 分享</span>
+        </div>
+      </article>
+    `;
+  }
+
+  function initHomeInfiniteFeed() {
+    if (homeFeedObserver) {
+      homeFeedObserver.disconnect();
+      homeFeedObserver = null;
+    }
+
+    const list = document.querySelector('.mobile-list[data-feed-source="home"]');
+    const sentinel = document.querySelector('[data-feed-sentinel]');
+    if (!list || !sentinel || window.location.pathname !== "/") return;
+
+    let loading = false;
+    let done = sentinel.dataset.done === "1";
+    let offset = Number(list.dataset.feedOffset || list.querySelectorAll(".m-card").length || 0);
+    const limit = Number(list.dataset.feedLimit || 10);
+    const sort = list.dataset.feedSort || "latest";
+    const board = list.dataset.feedBoard || "";
+
+    function setSentinel(text, state) {
+      sentinel.textContent = text;
+      sentinel.dataset.state = state;
+      sentinel.hidden = false;
+    }
+
+    async function loadMore() {
+      if (loading || done) return;
+      loading = true;
+      setSentinel("正在加载更多...", "loading");
+      try {
+        const url = new URL("/api/feed-page", window.location.origin);
+        url.searchParams.set("sort", sort);
+        if (board) url.searchParams.set("board", board);
+        url.searchParams.set("offset", String(offset));
+        url.searchParams.set("limit", String(limit));
+        const response = await fetch(url, { credentials: "same-origin" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) {
+          done = true;
+          setSentinel("已经到底了", "done");
+          return;
+        }
+        list.insertAdjacentHTML("beforeend", items.map(renderMobileFeedCard).join(""));
+        offset = Number(data.next_offset ?? offset + items.length);
+        list.dataset.feedOffset = String(offset);
+        done = !data.has_more;
+        setSentinel(done ? "已经到底了" : "继续下滑加载更多", done ? "done" : "idle");
+      } catch {
+        setSentinel("加载失败，下滑可重试", "error");
+      } finally {
+        loading = false;
+      }
+    }
+
+    setSentinel(done ? "已经到底了" : "继续下滑加载更多", done ? "done" : "idle");
+    homeFeedObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          loadMore();
+        }
+      },
+      { rootMargin: "320px 0px" }
+    );
+    homeFeedObserver.observe(sentinel);
+  }
+
+  function initPageFeatures() {
+    scheduleWarmRoutes();
+    initHomeInfiniteFeed();
   }
 
   document.addEventListener(
@@ -246,8 +356,8 @@
   });
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", scheduleWarmRoutes, { once: true });
+    document.addEventListener("DOMContentLoaded", initPageFeatures, { once: true });
   } else {
-    scheduleWarmRoutes();
+    initPageFeatures();
   }
 })();
