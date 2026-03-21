@@ -369,8 +369,8 @@
   }
 
   function initAccountChip() {
-    const token = localStorage.getItem(USER_TOKEN_KEY);
-    const name = localStorage.getItem(USER_NAME_KEY) || "";
+    const token = sessionStorage.getItem(USER_TOKEN_KEY);
+    const name = sessionStorage.getItem(USER_NAME_KEY) || "";
     const initial = (name.trim().charAt(0) || "我").toUpperCase();
     const loggedIn = Boolean(token && name);
     syncAuthClass(loggedIn);
@@ -415,8 +415,8 @@
       });
 
       logout.addEventListener("click", () => {
-        localStorage.removeItem(USER_TOKEN_KEY);
-        localStorage.removeItem(USER_NAME_KEY);
+        sessionStorage.removeItem(USER_TOKEN_KEY);
+        sessionStorage.removeItem(USER_NAME_KEY);
         syncAuthClass(false);
         document.querySelectorAll("[data-account-dropdown]").forEach((node) => {
           node.hidden = true;

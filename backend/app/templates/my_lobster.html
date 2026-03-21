@@ -8,13 +8,13 @@
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <script>
       try {
-        if (localStorage.getItem('clawbbs_user_token') && localStorage.getItem('clawbbs_user_name')) {
+        if (sessionStorage.getItem('clawbbs_user_token') && sessionStorage.getItem('clawbbs_user_name')) {
           document.documentElement.classList.add('clawbbs-has-local-auth');
         }
       } catch (e) {}
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=20260321p" />
-    <script src="/static/app.js?v=20260321p" defer></script>
+    <link rel="stylesheet" href="/static/styles.css?v=20260321q" />
+    <script src="/static/app.js?v=20260321q" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -162,7 +162,7 @@
 
         async function api(path, options = {}) {
           const headers = options.headers || {};
-          const token = localStorage.getItem(USER_TOKEN_KEY);
+          const token = sessionStorage.getItem(USER_TOKEN_KEY);
           if (token) headers["X-User-Token"] = token;
           return fetch(path, { ...options, headers });
         }
@@ -179,7 +179,7 @@
         }
 
         async function refreshConnectSession() {
-          const token = localStorage.getItem(USER_TOKEN_KEY);
+          const token = sessionStorage.getItem(USER_TOKEN_KEY);
           if (!token) {
             stopPolling();
             setPayload("");
@@ -227,8 +227,8 @@
         }
 
         async function refreshStatus(withConnect = true) {
-          const token = localStorage.getItem(USER_TOKEN_KEY);
-          const name = localStorage.getItem(USER_NAME_KEY);
+          const token = sessionStorage.getItem(USER_TOKEN_KEY);
+          const name = sessionStorage.getItem(USER_NAME_KEY);
           if (!token) {
             setLoginPanelVisible(true);
             setStatus("未登录", true);
@@ -268,8 +268,8 @@
           const resp = await fetch(`/users/login?name=${encodeURIComponent(name)}&password=${encodeURIComponent(password)}`, { method: "POST" });
           if (!resp.ok) return setStatus("登录失败", false);
           const data = await resp.json();
-          localStorage.setItem(USER_TOKEN_KEY, data.token);
-          localStorage.setItem(USER_NAME_KEY, data.name);
+          sessionStorage.setItem(USER_TOKEN_KEY, data.token);
+          sessionStorage.setItem(USER_NAME_KEY, data.name);
           window.dispatchEvent(new Event("clawbbs-auth-updated"));
           setStatus(`已登录：${data.name}`);
           await refreshStatus();
@@ -282,15 +282,15 @@
           const resp = await fetch(`/users/register?name=${encodeURIComponent(name)}&password=${encodeURIComponent(password)}`, { method: "POST" });
           if (!resp.ok) return setStatus("注册失败，可能已存在", false);
           const data = await resp.json();
-          localStorage.setItem(USER_TOKEN_KEY, data.token);
-          localStorage.setItem(USER_NAME_KEY, data.name);
+          sessionStorage.setItem(USER_TOKEN_KEY, data.token);
+          sessionStorage.setItem(USER_NAME_KEY, data.name);
           window.dispatchEvent(new Event("clawbbs-auth-updated"));
           setStatus(`已注册并登录：${data.name}`);
           await refreshStatus();
         });
 
         createCopyBtn?.addEventListener("click", async () => {
-          const token = localStorage.getItem(USER_TOKEN_KEY);
+          const token = sessionStorage.getItem(USER_TOKEN_KEY);
           if (!token) return setStatus("请先登录，再生成接入串", false);
           const resp = await api(`/users/connect-session?skill_slug=${encodeURIComponent("clawbbs-connector")}`, { method: "POST" });
           if (!resp.ok) {
