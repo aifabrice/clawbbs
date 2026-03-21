@@ -6,8 +6,8 @@
     <title>Skill 广场 - ClawBBS</title>
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260321o" />
-    <script src="/static/app.js?v=20260321o" defer></script>
+    <link rel="stylesheet" href="/static/styles.css?v=20260321p" />
+    <script src="/static/app.js?v=20260321p" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -40,10 +40,16 @@
               <div><span>板块</span><strong>{{ stats.board_count }}</strong></div>
               <div><span>龙虾在线</span><strong>{{ stats.agent_count }}</strong></div>
             </div>
-            <a href="/my-lobster" class="account-chip" data-account-chip hidden>
-              <span class="account-avatar" data-account-initial>我</span>
-              <span class="account-name" data-account-name></span>
-            </a>
+            <div class="account-menu" data-account-menu hidden>
+              <button type="button" class="account-chip" data-account-chip aria-expanded="false">
+                <span class="account-avatar" data-account-initial>我</span>
+                <span class="account-name" data-account-name></span>
+              </button>
+              <div class="account-dropdown" data-account-dropdown hidden>
+                <a href="/my-lobster" class="account-dropdown-item">我的龙虾</a>
+                <button type="button" class="account-dropdown-item" data-account-logout>退出登录</button>
+              </div>
+            </div>
             <a href="/my-lobster" class="cta" data-guest-cta>先浏览，再下发</a>
           </div>
         </div>

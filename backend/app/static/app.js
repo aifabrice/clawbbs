@@ -364,22 +364,65 @@
     });
   }
 
+  function syncAuthClass(loggedIn) {
+    document.documentElement.classList.toggle("clawbbs-has-local-auth", loggedIn);
+  }
+
   function initAccountChip() {
     const token = localStorage.getItem(USER_TOKEN_KEY);
     const name = localStorage.getItem(USER_NAME_KEY) || "";
     const initial = (name.trim().charAt(0) || "我").toUpperCase();
     const loggedIn = Boolean(token && name);
+    syncAuthClass(loggedIn);
 
-    document.querySelectorAll("[data-account-chip]").forEach((node) => {
+    document.querySelectorAll("[data-account-menu]").forEach((node) => {
       node.hidden = !loggedIn;
+    });
+    document.querySelectorAll("[data-account-chip]").forEach((node) => {
       const initialEl = node.querySelector("[data-account-initial]");
       const nameEl = node.querySelector("[data-account-name]");
       if (initialEl) initialEl.textContent = initial;
       if (nameEl) nameEl.textContent = name;
+      node.setAttribute("aria-expanded", "false");
+    });
+    document.querySelectorAll("[data-account-dropdown]").forEach((node) => {
+      node.hidden = true;
     });
 
     document.querySelectorAll("[data-guest-cta]").forEach((node) => {
       node.hidden = loggedIn;
+    });
+  }
+
+  function initAccountMenu() {
+    document.querySelectorAll("[data-account-menu]").forEach((menu) => {
+      const toggle = menu.querySelector("[data-account-chip]");
+      const dropdown = menu.querySelector("[data-account-dropdown]");
+      const logout = menu.querySelector("[data-account-logout]");
+      if (!toggle || !dropdown || !logout) return;
+
+      toggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        const next = dropdown.hidden;
+        document.querySelectorAll("[data-account-dropdown]").forEach((node) => {
+          node.hidden = true;
+        });
+        document.querySelectorAll("[data-account-chip]").forEach((node) => {
+          node.setAttribute("aria-expanded", "false");
+        });
+        dropdown.hidden = !next;
+        toggle.setAttribute("aria-expanded", String(next));
+      });
+
+      logout.addEventListener("click", () => {
+        localStorage.removeItem(USER_TOKEN_KEY);
+        localStorage.removeItem(USER_NAME_KEY);
+        syncAuthClass(false);
+        document.querySelectorAll("[data-account-dropdown]").forEach((node) => {
+          node.hidden = true;
+        });
+        window.dispatchEvent(new Event("clawbbs-auth-updated"));
+      });
     });
   }
 
@@ -388,6 +431,7 @@
     initHomeInfiniteFeed();
     initSearchShells();
     initAccountChip();
+    initAccountMenu();
   }
 
   document.addEventListener(
@@ -434,6 +478,17 @@
       .catch(() => {
         window.location.reload();
       });
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-account-menu]")) {
+      document.querySelectorAll("[data-account-dropdown]").forEach((node) => {
+        node.hidden = true;
+      });
+      document.querySelectorAll("[data-account-chip]").forEach((node) => {
+        node.setAttribute("aria-expanded", "false");
+      });
+    }
   });
 
   window.addEventListener("clawbbs-auth-updated", initAccountChip);

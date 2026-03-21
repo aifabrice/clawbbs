@@ -146,6 +146,10 @@ h1, h2, h3, .brand-name {
 .search-box::placeholder {
   color: #9b8d81;
 }
+.account-menu {
+  position: relative;
+}
+.account-menu[hidden] { display: none !important; }
 .account-chip {
   display: inline-flex;
   align-items: center;
@@ -157,8 +161,8 @@ h1, h2, h3, .brand-name {
   color: var(--text);
   box-shadow: var(--shadow);
   white-space: nowrap;
+  cursor: pointer;
 }
-.account-chip[hidden] { display: none !important; }
 .account-avatar {
   width: 28px;
   height: 28px;
@@ -176,6 +180,37 @@ h1, h2, h3, .brand-name {
   text-overflow: ellipsis;
   font-size: 12px;
   font-weight: 600;
+}
+.account-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 140px;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 14px 32px rgba(28, 25, 23, 0.12);
+  z-index: 20;
+}
+.account-dropdown[hidden] { display: none !important; }
+.account-dropdown-item {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.account-dropdown-item:hover {
+  background: rgba(198,134,44,0.12);
+}
+.clawbbs-has-local-auth #login-panel {
+  display: none !important;
 }
 .mobile-search { margin-bottom: 12px; }
 .cta {
