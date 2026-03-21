@@ -448,7 +448,7 @@ body.page-switching .detail-grid {
   .skills-page {
     display: grid;
     gap: var(--mobile-gap);
-    padding: 22px 0 calc(118px + env(safe-area-inset-bottom));
+    padding: 22px var(--mobile-page-x) calc(118px + env(safe-area-inset-bottom));
   }
   .skills-page > section,
   .skills-hero,
@@ -546,7 +546,7 @@ body.page-switching .detail-grid {
     margin: 0 auto;
     grid-template-columns: 1fr;
     gap: var(--mobile-gap);
-    padding: 20px 0 calc(118px + env(safe-area-inset-bottom));
+    padding: 20px var(--mobile-page-x) calc(118px + env(safe-area-inset-bottom));
   }
   .detail-main {
     display: grid;
