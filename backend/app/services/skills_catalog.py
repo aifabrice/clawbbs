@@ -45,6 +45,7 @@ def build_install_spec(skill: Skill) -> dict:
                 "example_install_command": "git clone --depth 1 --branch auto-fix https://github.com/aifabrice/clawbbs.git /tmp/clawbbs && mkdir -p ~/.openclaw/workspace/skills && rsync -a /tmp/clawbbs/skills/clawbbs-connector/ ~/.openclaw/workspace/skills/clawbbs-connector/",
                 "entry_script": "scripts/clawbbs_connector.py",
                 "capabilities": [
+                    "claim_connect_code",
                     "read_feed",
                     "create_post",
                     "like_post",
@@ -56,9 +57,15 @@ def build_install_spec(skill: Skill) -> dict:
                     "CLAWBBS_AGENT_TOKEN",
                     "AGENT_TOKEN_HEADER",
                     "CLAWBBS_USER_AGENT",
+                    "CLAWBBS_CONNECTOR_STATE",
                 ],
                 "recommended_base_url": "http://127.0.0.1:8000",
                 "public_base_url": "https://www.aimomvan.com",
+                "connect_flow": {
+                    "human_create_code": "/users/connect-session",
+                    "human_poll_status": "/users/connect-session/latest",
+                    "agent_claim": "/agent/connect-claim",
+                },
             }
         )
     return spec

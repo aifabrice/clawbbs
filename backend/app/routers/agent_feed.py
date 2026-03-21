@@ -1,8 +1,9 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlmodel import Session, select
 import secrets
 from ..db import get_session
-from ..models import Post, Skill, User, RoleEnum, Comment, PostVote
+from ..models import Post, Skill, User, RoleEnum, Comment, PostVote, UserBinding, LobsterConnectSession
 from ..routers.deps import get_agent_user
 from ..config import AGENT_TOKEN_HEADER, AGENT_BOOTSTRAP_TOKEN
 from ..services.scoring import compute_hot_score, compute_recommend_score
@@ -32,6 +33,7 @@ def agent_capabilities():
             "user_login": "/users/login",
             "user_bind": "/users/bind",
             "pairing_code": "/users/pairing",
+            "connect_claim": "/agent/connect-claim",
             "task_dispatch": "/tasks/skill-install/{skill_id}",
             "task_poll": "/tasks/agent",
             "task_complete": "/tasks/{task_id}/complete",
@@ -62,6 +64,78 @@ def agent_register(
         "name": user.name,
         "token": user.token,
         "header": AGENT_TOKEN_HEADER,
+    }
+
+
+@router.post("/connect-claim")
+def agent_connect_claim(
+    code: str,
+    agent_name: str = "",
+    session: Session = Depends(get_session),
+):
+    item = session.exec(
+        select(LobsterConnectSession)
+        .where(LobsterConnectSession.connect_code == code)
+        .order_by(LobsterConnectSession.created_at.desc())
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Invalid connect code")
+    if item.status == "claimed" and item.agent_id:
+        agent = session.get(User, item.agent_id)
+        return {
+            "status": "already_claimed",
+            "agent_id": agent.id if agent else item.agent_id,
+            "agent_name": agent.name if agent else item.agent_name,
+            "agent_token": agent.token if agent else None,
+            "header": AGENT_TOKEN_HEADER,
+        }
+    if item.expires_at and datetime.utcnow() > item.expires_at:
+        item.status = "expired"
+        session.add(item)
+        session.commit()
+        raise HTTPException(status_code=400, detail="Connect code expired")
+
+    existing_binding = session.exec(
+        select(UserBinding).where(UserBinding.user_id == item.user_id)
+    ).first()
+    if existing_binding:
+        bound_agent = session.get(User, existing_binding.agent_id)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "User already bound to a lobster",
+                "agent_id": bound_agent.id if bound_agent else existing_binding.agent_id,
+                "agent_name": bound_agent.name if bound_agent else None,
+            },
+        )
+
+    final_name = (agent_name or f"lobster-{code[-6:]}").strip()[:64]
+    token = secrets.token_urlsafe(24)
+    user = User(name=final_name, role=RoleEnum.agent, token=token)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    binding = UserBinding(user_id=item.user_id, agent_id=user.id)
+    item.agent_id = user.id
+    item.agent_name = user.name
+    item.status = "claimed"
+    item.claimed_at = datetime.utcnow()
+    session.add(binding)
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+
+    return {
+        "status": "claimed",
+        "agent_id": user.id,
+        "agent_name": user.name,
+        "agent_token": user.token,
+        "header": AGENT_TOKEN_HEADER,
+        "user_id": item.user_id,
+        "skill_slug": item.skill_slug,
+        "connect_code": item.connect_code,
+        "claimed_at": item.claimed_at,
     }
 
 

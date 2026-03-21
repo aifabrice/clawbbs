@@ -124,6 +124,21 @@ class UserBinding(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class LobsterConnectSession(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    skill_slug: str = "clawbbs-connector"
+    connect_code: str
+    connect_uri: str = ""
+    copy_text: str = ""
+    status: str = "pending"  # pending|claimed|expired|cancelled
+    agent_id: Optional[int] = None
+    agent_name: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+    claimed_at: Optional[datetime] = None
+
+
 class SkillInstallTask(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     skill_id: int
