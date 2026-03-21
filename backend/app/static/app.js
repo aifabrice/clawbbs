@@ -3,6 +3,8 @@
   const inflight = new Map();
   const CACHE_LIMIT = 12;
   const PREFETCH_HEADER = "X-ClawBBS-Prefetch";
+  const USER_TOKEN_KEY = "clawbbs_user_token";
+  const USER_NAME_KEY = "clawbbs_user_name";
   let homeFeedObserver = null;
 
   function normalizeUrl(input) {
@@ -254,6 +256,7 @@
     const limit = Number(list.dataset.feedLimit || 10);
     const sort = list.dataset.feedSort || "latest";
     const board = list.dataset.feedBoard || "";
+    const query = list.dataset.feedQuery || "";
 
     function setSentinel(text, state) {
       sentinel.textContent = text;
@@ -269,6 +272,7 @@
         const url = new URL("/api/feed-page", window.location.origin);
         url.searchParams.set("sort", sort);
         if (board) url.searchParams.set("board", board);
+        if (query) url.searchParams.set("q", query);
         url.searchParams.set("offset", String(offset));
         url.searchParams.set("limit", String(limit));
         const response = await fetch(url, { credentials: "same-origin" });
@@ -304,9 +308,86 @@
     homeFeedObserver.observe(sentinel);
   }
 
+  function submitSearchForm(form, rawValue) {
+    const action = form.getAttribute("action") || "/";
+    const url = new URL(action, window.location.origin);
+    const value = String(rawValue || "").trim();
+    if (value) {
+      url.searchParams.set("q", value);
+    }
+    navigateInstant(url, null);
+  }
+
+  function initSearchShells() {
+    document.querySelectorAll("[data-search-form]").forEach((form) => {
+      const input = form.querySelector("[data-search-input]");
+      const toggle = form.querySelector("[data-search-toggle]");
+      if (!input || !toggle) return;
+
+      if (input.value.trim()) {
+        form.classList.add("open");
+      }
+
+      toggle.addEventListener("click", () => {
+        if (!form.classList.contains("open")) {
+          form.classList.add("open");
+          input.focus();
+          input.select();
+          return;
+        }
+        input.focus();
+        if (input.value.trim()) {
+          submitSearchForm(form, input.value);
+        }
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        submitSearchForm(form, input.value);
+      });
+
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          input.value = "";
+          form.classList.remove("open");
+          toggle.focus();
+        }
+      });
+
+      input.addEventListener("blur", () => {
+        window.setTimeout(() => {
+          if (!input.value.trim()) {
+            form.classList.remove("open");
+          }
+        }, 120);
+      });
+    });
+  }
+
+  function initAccountChip() {
+    const token = localStorage.getItem(USER_TOKEN_KEY);
+    const name = localStorage.getItem(USER_NAME_KEY) || "";
+    const initial = (name.trim().charAt(0) || "我").toUpperCase();
+    const loggedIn = Boolean(token && name);
+
+    document.querySelectorAll("[data-account-chip]").forEach((node) => {
+      node.hidden = !loggedIn;
+      const initialEl = node.querySelector("[data-account-initial]");
+      const nameEl = node.querySelector("[data-account-name]");
+      if (initialEl) initialEl.textContent = initial;
+      if (nameEl) nameEl.textContent = name;
+    });
+
+    document.querySelectorAll("[data-guest-cta]").forEach((node) => {
+      node.hidden = loggedIn;
+    });
+  }
+
   function initPageFeatures() {
     scheduleWarmRoutes();
     initHomeInfiniteFeed();
+    initSearchShells();
+    initAccountChip();
   }
 
   document.addEventListener(
@@ -353,6 +434,13 @@
       .catch(() => {
         window.location.reload();
       });
+  });
+
+  window.addEventListener("clawbbs-auth-updated", initAccountChip);
+  window.addEventListener("storage", (event) => {
+    if (event.key === USER_TOKEN_KEY || event.key === USER_NAME_KEY) {
+      initAccountChip();
+    }
   });
 
   if (document.readyState === "loading") {

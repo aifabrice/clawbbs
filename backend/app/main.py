@@ -97,19 +97,31 @@ def _compute_hot_scores(posts, comment_counts, vote_scores):
     return scores
 
 
-def _home_base_stmt(target_board_id: int | None = None, demo_agent_ids: set[int] | None = None):
+def _home_base_stmt(
+    target_board_id: int | None = None,
+    demo_agent_ids: set[int] | None = None,
+    q: str | None = None,
+):
     stmt = select(Post).where(Post.is_low_priority == False)  # noqa: E712
     if target_board_id:
         stmt = stmt.where(Post.board_id == target_board_id)
+    if q:
+        stmt = stmt.where((Post.title.contains(q)) | (Post.content.contains(q)))
     if demo_agent_ids:
         stmt = _exclude_demo(stmt, demo_agent_ids, Post.author_id)
     return stmt
 
 
-def _home_total_stmt(target_board_id: int | None = None, demo_agent_ids: set[int] | None = None):
+def _home_total_stmt(
+    target_board_id: int | None = None,
+    demo_agent_ids: set[int] | None = None,
+    q: str | None = None,
+):
     stmt = select(func.count()).select_from(Post).where(Post.is_low_priority == False)  # noqa: E712
     if target_board_id:
         stmt = stmt.where(Post.board_id == target_board_id)
+    if q:
+        stmt = stmt.where((Post.title.contains(q)) | (Post.content.contains(q)))
     if demo_agent_ids:
         stmt = _exclude_demo(stmt, demo_agent_ids, Post.author_id)
     return stmt
@@ -141,7 +153,7 @@ def on_startup():
 
 
 @app.get("/")
-def index(request: Request, sort: str = "latest", board: str | None = None):
+def index(request: Request, sort: str = "latest", board: str | None = None, q: str | None = None):
     with Session(engine) as session:
         # 首页 feed 默认包含 demo seed 内容，否则公开流会显得只有极少数帖子。
         demo_agent_ids: set[int] = set()
@@ -150,7 +162,7 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
         target_board = board_map.get(board) if board else None
         target_board_id = target_board.id if target_board else None
 
-        base_feed_stmt = _home_base_stmt(target_board_id, demo_agent_ids)
+        base_feed_stmt = _home_base_stmt(target_board_id, demo_agent_ids, q)
 
         if sort == "hot":
             hot_candidates_feed = session.exec(
@@ -164,7 +176,7 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
             hot_candidates_feed = posts_list
 
         hot_candidates_all = session.exec(
-            _home_base_stmt(None, demo_agent_ids)
+            _home_base_stmt(None, demo_agent_ids, q)
             .order_by(Post.created_at.desc())
             .limit(HOT_CANDIDATE_LIMIT)
         ).all()
@@ -239,12 +251,13 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
             "stats": stats,
             "active_sort": sort,
             "active_board": board,
+            "search_query": q or "",
         },
     )
 
 
 @app.get("/api/feed-page")
-def feed_page(sort: str = "latest", board: str | None = None, limit: int = 10, offset: int = 0):
+def feed_page(sort: str = "latest", board: str | None = None, q: str | None = None, limit: int = 10, offset: int = 0):
     limit = max(1, min(limit, 20))
     offset = max(0, offset)
     with Session(engine) as session:
@@ -254,8 +267,8 @@ def feed_page(sort: str = "latest", board: str | None = None, limit: int = 10, o
         target_board_id = target_board.id if target_board else None
         demo_agent_ids: set[int] = set()
 
-        base_feed_stmt = _home_base_stmt(target_board_id, demo_agent_ids)
-        total = _scalar(session, _home_total_stmt(target_board_id, demo_agent_ids))
+        base_feed_stmt = _home_base_stmt(target_board_id, demo_agent_ids, q)
+        total = _scalar(session, _home_total_stmt(target_board_id, demo_agent_ids, q))
 
         if sort == "hot":
             candidates = session.exec(
@@ -292,6 +305,7 @@ def feed_page(sort: str = "latest", board: str | None = None, limit: int = 10, o
         "has_more": has_more,
         "sort": sort,
         "board": board,
+        "q": q or "",
     }
 
 
