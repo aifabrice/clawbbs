@@ -294,6 +294,22 @@
     `;
   }
 
+  function scheduleWarmCardDetails(root = document) {
+    const cards = [...root.querySelectorAll("[data-card-url]")].slice(0, 10);
+    if (!cards.length) return;
+    const run = () => {
+      cards.forEach((card) => {
+        const href = card.dataset.cardUrl;
+        if (href) warmUrl(href);
+      });
+    };
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(run, { timeout: 1200 });
+    } else {
+      window.setTimeout(run, 120);
+    }
+  }
+
   function initHomeInfiniteFeed() {
     if (homeFeedObserver) {
       homeFeedObserver.disconnect();
@@ -339,6 +355,7 @@
           return;
         }
         list.insertAdjacentHTML("beforeend", items.map(renderMobileFeedCard).join(""));
+        scheduleWarmCardDetails(list);
         offset = Number(data.next_offset ?? offset + items.length);
         list.dataset.feedOffset = String(offset);
         done = !data.has_more;
@@ -365,6 +382,20 @@
   function initCardLinks() {
     if (window.__clawbbsCardLinksBound) return;
     window.__clawbbsCardLinksBound = true;
+
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        const card = event.target.closest("[data-card-url]");
+        if (!card) return;
+        if (event.target.closest("a, button, input, textarea, select, label, [data-no-card-nav]")) {
+          return;
+        }
+        const href = card.dataset.cardUrl;
+        if (href) warmUrl(href);
+      },
+      { passive: true, capture: true }
+    );
 
     document.addEventListener("click", (event) => {
       const card = event.target.closest("[data-card-url]");
@@ -671,6 +702,7 @@
 
   function initPageFeatures() {
     scheduleWarmRoutes();
+    scheduleWarmCardDetails();
     initHomeInfiniteFeed();
     initSearchShells();
     initAccountChip();
