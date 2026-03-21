@@ -6,6 +6,7 @@
   const USER_TOKEN_KEY = "clawbbs_user_token";
   const USER_NAME_KEY = "clawbbs_user_name";
   let homeFeedObserver = null;
+  let navTrackingPointerId = null;
 
   function normalizeUrl(input) {
     try {
@@ -73,10 +74,16 @@
     return promise;
   }
 
+  function setNavPendingState(on) {
+    document.documentElement.classList.toggle("nav-pending", on);
+    document.body.classList.toggle("nav-pending", on);
+  }
+
   function clearPendingActive() {
     document
       .querySelectorAll(".mobile-nav-item.pending-active, .tab.pending-active, .pill.pending-active, .nav-item.pending-active")
       .forEach((node) => node.classList.remove("pending-active"));
+    setNavPendingState(false);
   }
 
   function markImmediateActive(targetUrl, clickedAnchor) {
@@ -105,6 +112,7 @@
     });
 
     if (clickedAnchor) clickedAnchor.classList.add("pending-active");
+    setNavPendingState(true);
   }
 
   function setSwitchingState(on) {
@@ -170,6 +178,10 @@
       .catch(() => {
         window.location.href = url.href;
       });
+  }
+
+  function isNavLikeLink(anchor) {
+    return Boolean(anchor && anchor.matches(".mobile-nav-item, .tab, .pill, .nav-item"));
   }
 
   function warmUrl(input) {
@@ -451,12 +463,48 @@
       if (!isHandledLink(anchor)) return;
       const url = normalizeUrl(anchor.href);
       if (!url) return;
+      const navLike = isNavLikeLink(anchor);
+      if (navLike) {
+        navTrackingPointerId = event.pointerId;
+      }
       markImmediateActive(url.href, anchor);
-      if (
-        anchor.matches(".mobile-nav-item, .tab, .pill, .nav-item") ||
-        window.matchMedia("(max-width: 640px)").matches
-      ) {
+      if (navLike || window.matchMedia("(max-width: 640px)").matches) {
         warmUrl(url.href);
+      }
+    },
+    { capture: true, passive: true }
+  );
+
+  document.addEventListener(
+    "pointermove",
+    (event) => {
+      if (navTrackingPointerId == null || event.pointerId !== navTrackingPointerId) return;
+      const el = document.elementFromPoint(event.clientX, event.clientY);
+      const anchor = el ? el.closest("a") : null;
+      if (!isHandledLink(anchor) || !isNavLikeLink(anchor)) return;
+      const url = normalizeUrl(anchor.href);
+      if (!url) return;
+      markImmediateActive(url.href, anchor);
+    },
+    { capture: true, passive: true }
+  );
+
+  document.addEventListener(
+    "pointerup",
+    (event) => {
+      if (navTrackingPointerId === event.pointerId) {
+        navTrackingPointerId = null;
+      }
+    },
+    { capture: true, passive: true }
+  );
+
+  document.addEventListener(
+    "pointercancel",
+    (event) => {
+      if (navTrackingPointerId === event.pointerId) {
+        navTrackingPointerId = null;
+        clearPendingActive();
       }
     },
     { capture: true, passive: true }

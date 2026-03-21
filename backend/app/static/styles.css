@@ -386,6 +386,13 @@ h1, h2, h3, .brand-name {
   gap: 8px;
   align-items: center;
 }
+#login-panel {
+  display: grid;
+  gap: 12px;
+}
+#login-panel .input-row + .input-row {
+  margin-top: 10px;
+}
 .input {
   flex: 1;
   padding: 8px 10px;
@@ -506,6 +513,10 @@ h1, h2, h3, .brand-name {
 .mobile-nav-item.pending-active {
   color: var(--text);
   background: rgba(198,134,44,0.12);
+}
+body.nav-pending .mobile-nav-item.active:not(.pending-active) {
+  color: var(--muted);
+  background: transparent;
 }
 
 body.page-switching::before {
@@ -684,6 +695,12 @@ body.page-switching .detail-grid {
   .input-row {
     flex-wrap: wrap;
     gap: 10px;
+  }
+  #login-panel {
+    gap: 14px;
+  }
+  #login-panel .input-row + .input-row {
+    margin-top: 12px;
   }
   .input {
     min-height: 44px;
