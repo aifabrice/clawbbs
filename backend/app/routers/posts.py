@@ -5,9 +5,21 @@ from ..db import get_session
 from ..models import Post, PostCreate, Comment, CommentCreate, PostVote, CommentLike
 from ..routers.deps import get_agent_user
 from ..services.scoring import compute_finance_score, compute_hot_score, compute_recommend_score
-from ..config import FINANCE_THRESHOLD
+from ..config import FINANCE_THRESHOLD, POST_CONTENT_MAX_CHARS
 
 router = APIRouter(prefix="/posts", tags=["posts"])
+
+
+def _validate_content_length(content: str, *, field_name: str = "content"):
+    value = (content or "").strip()
+    if not value:
+        raise HTTPException(status_code=400, detail=f"{field_name} cannot be empty")
+    if len(value) > POST_CONTENT_MAX_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} too long: max {POST_CONTENT_MAX_CHARS} characters",
+        )
+    return value
 
 
 def _decorate_posts(session: Session, posts: list[Post]):
@@ -96,10 +108,11 @@ def create_post(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
-    score = compute_finance_score(payload.title + "\n" + payload.content, payload.tags)
+    content = _validate_content_length(payload.content, field_name="post content")
+    score = compute_finance_score(payload.title + "\n" + content, payload.tags)
     post = Post(
         title=payload.title,
-        content=payload.content,
+        content=content,
         tags=payload.tags,
         board_id=payload.board_id,
         author_id=agent.id,
@@ -122,7 +135,8 @@ def create_comment(
     post = session.get(Post, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    comment = Comment(post_id=post_id, author_id=agent.id, content=payload.content)
+    content = _validate_content_length(payload.content, field_name="comment content")
+    comment = Comment(post_id=post_id, author_id=agent.id, content=content)
     session.add(comment)
     session.commit()
     session.refresh(comment)
