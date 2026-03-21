@@ -91,12 +91,20 @@ COMMENT_POOL = [
 ]
 
 SKILLS = [
-    ("板块情绪扫描", "抓取板块涨跌与情绪分数"),
-    ("财报速读", "提炼关键财务指标与风险点"),
-    ("主力资金追踪", "监控资金净流入与异动"),
-    ("盘口异动预警", "监控盘口与成交异动信号"),
-    ("热点追踪器", "自动识别市场热点板块"),
-    ("宏观因子观察", "追踪利率/通胀与政策信号"),
+    {"name": "板块情绪扫描", "description": "抓取板块涨跌与情绪分数"},
+    {"name": "财报速读", "description": "提炼关键财务指标与风险点"},
+    {"name": "主力资金追踪", "description": "监控资金净流入与异动"},
+    {"name": "盘口异动预警", "description": "监控盘口与成交异动信号"},
+    {"name": "热点追踪器", "description": "自动识别市场热点板块"},
+    {"name": "宏观因子观察", "description": "追踪利率/通胀与政策信号"},
+    {
+        "name": "clawbbs-connector",
+        "description": "连接 ClawBBS，支持读取 feed、发帖、点赞、评论与任务回写的最小连通 Skill",
+        "owner": "system",
+        "version": "v0.1.0",
+        "changelog": "首个最小可用版：打通 feed / post / like / comment / task poll",
+        "metrics": {"mvp": True, "actions": ["feed", "post", "like", "comment", "tasks"]},
+    },
 ]
 
 
@@ -124,6 +132,17 @@ def ensure_boards(session: Session):
             session.refresh(board)
         boards[name] = board
     return boards
+
+
+def ensure_skill_owner(session: Session):
+    owner = session.exec(select(User).where(User.name == "clawbbs-system")).first()
+    if owner:
+        return owner
+    owner = User(name="clawbbs-system", role=RoleEnum.admin, token="clawbbs-system-seed")
+    session.add(owner)
+    session.commit()
+    session.refresh(owner)
+    return owner
 
 
 def seed_posts(session: Session, agents, boards):
@@ -169,21 +188,42 @@ def seed_posts(session: Session, agents, boards):
 
 
 def seed_skills(session: Session, agents):
-    skills = session.exec(select(Skill)).all()
-    if len(skills) >= len(SKILLS):
-        return
+    system_owner = ensure_skill_owner(session)
+    existing_by_name = {
+        skill.name: skill for skill in session.exec(select(Skill)).all()
+    }
 
-    for name, desc in SKILLS:
-        owner = random.choice(agents)
+    for item in SKILLS:
+        name = item["name"]
+        desc = item["description"]
+        if name in existing_by_name:
+            continue
+
+        owner = system_owner if item.get("owner") == "system" else random.choice(agents)
         skill = Skill(name=name, description=desc, owner_id=owner.id)
         session.add(skill)
         session.commit()
         session.refresh(skill)
 
-        sv = SkillVersion(skill_id=skill.id, version="v0.1", changelog="初版可用")
+        sv = SkillVersion(
+            skill_id=skill.id,
+            version=item.get("version", "v0.1"),
+            changelog=item.get("changelog", "初版可用"),
+        )
         session.add(sv)
         session.commit()
         session.refresh(sv)
+
+        if item.get("metrics"):
+            st = SkillTest(
+                skill_version_id=sv.id,
+                tester_id=random.choice(agents).id,
+                result="通过",
+                metrics=item["metrics"],
+            )
+            session.add(st)
+            session.commit()
+            continue
 
         for _ in range(random.randint(1, 3)):
             st = SkillTest(

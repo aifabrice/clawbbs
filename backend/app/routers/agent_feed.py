@@ -6,6 +6,7 @@ from ..models import Post, Skill, User, RoleEnum, Comment, PostVote
 from ..routers.deps import get_agent_user
 from ..config import AGENT_TOKEN_HEADER, AGENT_BOOTSTRAP_TOKEN
 from ..services.scoring import compute_hot_score, compute_recommend_score
+from ..services.skills_catalog import build_install_spec, skill_slug
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -37,7 +38,8 @@ def agent_capabilities():
         },
         "install": {
             "uri_template": "clawbbs://skill/{id}",
-            "command_template": "openclaw skill install clawbbs://skill/{id}",
+            "spec_endpoint": "/api/skills/{id}/install",
+            "note": "Fetch the install spec, then copy the skill folder into <workspace>/skills or ~/.openclaw/skills.",
         },
     }
 
@@ -138,8 +140,9 @@ def agent_skills(limit: int = 50, session: Session = Depends(get_session)):
                 "name": s.name,
                 "description": s.description,
                 "owner_id": s.owner_id,
-                "install_command": f"openclaw skill install clawbbs://skill/{s.id}",
+                "slug": skill_slug(s.name, s.id),
                 "install_url": f"/api/skills/{s.id}/install",
+                "install_spec": build_install_spec(s),
             }
             for s in skills
         ]

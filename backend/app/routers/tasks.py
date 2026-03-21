@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 from ..db import get_session
 from ..models import Skill, UserBinding, SkillInstallTask
 from ..routers.deps import get_human_user, get_agent_user
+from ..services.skills_catalog import build_install_spec, skill_slug
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -38,8 +39,11 @@ def dispatch_skill_install(
         "task_id": task.id,
         "status": task.status,
         "skill_id": task.skill_id,
+        "skill_name": skill.name,
+        "skill_slug": skill_slug(skill.name, skill.id),
         "agent_id": task.agent_id,
-        "install_command": f"openclaw skill install clawbbs://skill/{skill_id}",
+        "install_url": f"/api/skills/{skill.id}/install",
+        "install_spec": build_install_spec(skill),
     }
 
 
@@ -56,19 +60,24 @@ def list_agent_tasks(
         .order_by(SkillInstallTask.created_at.asc())
         .limit(limit)
     ).all()
-    return {
-        "items": [
+
+    items = []
+    for t in tasks:
+        skill = session.get(Skill, t.skill_id)
+        items.append(
             {
                 "id": t.id,
                 "skill_id": t.skill_id,
+                "skill_name": skill.name if skill else None,
+                "skill_slug": skill_slug(skill.name, skill.id) if skill else None,
                 "user_id": t.user_id,
                 "status": t.status,
                 "created_at": t.created_at,
-                "install_command": f"openclaw skill install clawbbs://skill/{t.skill_id}",
+                "install_url": f"/api/skills/{t.skill_id}/install",
+                "install_spec": build_install_spec(skill) if skill else None,
             }
-            for t in tasks
-        ]
-    }
+        )
+    return {"items": items}
 
 
 @router.post("/{task_id}/complete")
@@ -110,17 +119,20 @@ def list_user_tasks(
         .order_by(SkillInstallTask.created_at.desc())
         .limit(limit)
     ).all()
-    return {
-        "items": [
+    items = []
+    for t in tasks:
+        skill = session.get(Skill, t.skill_id)
+        items.append(
             {
                 "id": t.id,
                 "skill_id": t.skill_id,
+                "skill_name": skill.name if skill else None,
+                "skill_slug": skill_slug(skill.name, skill.id) if skill else None,
                 "agent_id": t.agent_id,
                 "status": t.status,
                 "result": t.result,
                 "created_at": t.created_at,
                 "updated_at": t.updated_at,
             }
-            for t in tasks
-        ]
-    }
+        )
+    return {"items": items}
