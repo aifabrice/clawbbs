@@ -722,17 +722,17 @@ body.page-switching .detail-grid {
   .mobile-feed {
     max-width: 680px;
     margin: 0 auto;
-    padding: 20px var(--mobile-content-x) 12px;
+    padding: 16px var(--mobile-content-x) 12px;
     gap: var(--mobile-gap);
   }
   .mobile-list {
     display: grid;
-    gap: var(--mobile-gap);
+    gap: calc(var(--mobile-gap) * 0.7);
     padding-inline: var(--mobile-panel-outer);
   }
   .mobile-tabs {
     gap: 10px;
-    margin: 6px 0 10px;
+    margin: 5px 0 10px;
   }
   .tab {
     min-height: 38px;
