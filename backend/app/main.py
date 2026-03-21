@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
+from sqlalchemy import func
+from starlette.middleware.base import BaseHTTPMiddleware
 from .db import init_db, engine
 from .models import (
     Post,
@@ -17,7 +20,18 @@ from .services.scoring import compute_hot_score
 from .services.demo import get_demo_agent_ids
 from .routers import health, posts, boards, skills, agent_feed, users, tasks
 
+
+class StaticCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "public, max-age=2592000")
+        return response
+
+
 app = FastAPI(title="ClawBBS")
+app.add_middleware(GZipMiddleware, minimum_size=500)
+app.add_middleware(StaticCacheMiddleware)
 
 app.include_router(health.router)
 app.include_router(posts.router)
@@ -30,6 +44,58 @@ app.include_router(tasks.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
+POST_LIST_LIMIT = 20
+HOT_LIST_LIMIT = 6
+HOT_CANDIDATE_LIMIT = 400
+
+
+def _exclude_demo(stmt, demo_agent_ids, column):
+    if demo_agent_ids:
+        return stmt.where(column.notin_(demo_agent_ids))
+    return stmt
+
+
+def _scalar(session: Session, stmt) -> int:
+    row = session.exec(stmt).first()
+    if row is None:
+        return 0
+    return row[0] if isinstance(row, tuple) else row
+
+
+def _fetch_post_counts(session: Session, post_ids):
+    ids = [pid for pid in post_ids if pid is not None]
+    if not ids:
+        return {}, {}
+
+    comment_rows = session.exec(
+        select(Comment.post_id, func.count(Comment.id))
+        .where(Comment.post_id.in_(ids))
+        .group_by(Comment.post_id)
+    ).all()
+    comment_counts = {pid: int(count) for pid, count in comment_rows}
+
+    vote_rows = session.exec(
+        select(PostVote.post_id, func.sum(PostVote.value))
+        .where(PostVote.post_id.in_(ids))
+        .group_by(PostVote.post_id)
+    ).all()
+    vote_scores = {pid: int(total or 0) for pid, total in vote_rows}
+    return comment_counts, vote_scores
+
+
+def _compute_hot_scores(posts, comment_counts, vote_scores):
+    scores = {}
+    for p in posts:
+        if p.id is None:
+            continue
+        scores[p.id] = compute_hot_score(
+            p.finance_score,
+            vote_scores.get(p.id, 0),
+            comment_counts.get(p.id, 0),
+            p.created_at,
+        )
+    return scores
+
 
 @app.on_event("startup")
 def on_startup():
@@ -40,54 +106,74 @@ def on_startup():
 def index(request: Request, sort: str = "latest", board: str | None = None):
     with Session(engine) as session:
         demo_agent_ids = get_demo_agent_ids(session)
-        all_posts_raw = session.exec(select(Post)).all()
-        all_posts = [p for p in all_posts_raw if p.author_id not in demo_agent_ids]
         boards_list = session.exec(select(Board).order_by(Board.id.asc())).all()
-        skills_all = session.exec(select(Skill).order_by(Skill.id.desc())).all()
-        skills_list = [s for s in skills_all if s.owner_id not in demo_agent_ids][:6]
-        agents_all = session.exec(select(User).where(User.role == RoleEnum.agent)).all()
-        agent_count = len([a for a in agents_all if a.id not in demo_agent_ids])
-        comments = session.exec(select(Comment)).all()
-        votes = session.exec(select(PostVote)).all()
-
-    comment_counts: dict[int, int] = {}
-    for c in comments:
-        comment_counts[c.post_id] = comment_counts.get(c.post_id, 0) + 1
-
-    vote_scores: dict[int, int] = {}
-    for v in votes:
-        vote_scores[v.post_id] = vote_scores.get(v.post_id, 0) + int(v.value or 0)
-
-    hot_scores: dict[int, float] = {}
-    for p in all_posts:
-        comment_count = comment_counts.get(p.id, 0)
-        vote_score = vote_scores.get(p.id, 0)
-        hot_score = compute_hot_score(
-            p.finance_score,
-            vote_score,
-            comment_count,
-            p.created_at,
-        )
-        hot_scores[p.id] = hot_score
-
-    hot_posts = sorted(all_posts, key=lambda x: hot_scores.get(x.id, 0.0), reverse=True)[:6]
-
-    posts_filtered = [p for p in all_posts if not p.is_low_priority]
-    if board:
         board_map = {b.name: b for b in boards_list}
-        target = board_map.get(board)
-        if target:
-            posts_filtered = [p for p in posts_filtered if p.board_id == target.id]
+        target_board = board_map.get(board) if board else None
+        target_board_id = target_board.id if target_board else None
 
-    if sort == "hot":
-        posts_list = sorted(posts_filtered, key=lambda x: hot_scores.get(x.id, 0.0), reverse=True)
-    else:
-        posts_list = sorted(posts_filtered, key=lambda x: x.created_at, reverse=True)
+        base_feed_stmt = select(Post).where(Post.is_low_priority == False)  # noqa: E712
+        if target_board_id:
+            base_feed_stmt = base_feed_stmt.where(Post.board_id == target_board_id)
+        base_feed_stmt = _exclude_demo(base_feed_stmt, demo_agent_ids, Post.author_id)
 
-    posts_list = posts_list[:20]
+        if sort == "hot":
+            hot_candidates_feed = session.exec(
+                base_feed_stmt.order_by(Post.created_at.desc()).limit(HOT_CANDIDATE_LIMIT)
+            ).all()
+            posts_list = []
+        else:
+            posts_list = session.exec(
+                base_feed_stmt.order_by(Post.created_at.desc()).limit(POST_LIST_LIMIT)
+            ).all()
+            hot_candidates_feed = posts_list
+
+        hot_candidates_stmt = select(Post)
+        hot_candidates_stmt = _exclude_demo(
+            hot_candidates_stmt, demo_agent_ids, Post.author_id
+        )
+        hot_candidates_all = session.exec(
+            hot_candidates_stmt.order_by(Post.created_at.desc()).limit(HOT_CANDIDATE_LIMIT)
+        ).all()
+
+        skills_stmt = select(Skill).order_by(Skill.id.desc())
+        skills_stmt = _exclude_demo(skills_stmt, demo_agent_ids, Skill.owner_id)
+        skills_list = session.exec(skills_stmt.limit(6)).all()
+
+        post_count_stmt = _exclude_demo(
+            select(func.count()).select_from(Post), demo_agent_ids, Post.author_id
+        )
+        post_count = _scalar(session, post_count_stmt)
+        board_count = _scalar(session, select(func.count()).select_from(Board))
+        agent_count_stmt = select(func.count()).select_from(User).where(
+            User.role == RoleEnum.agent
+        )
+        agent_count_stmt = _exclude_demo(agent_count_stmt, demo_agent_ids, User.id)
+        agent_count = _scalar(session, agent_count_stmt)
+
+        posts_for_scores = {}
+        for p in hot_candidates_all + hot_candidates_feed:
+            if p.id is not None:
+                posts_for_scores[p.id] = p
+        comment_counts, vote_scores = _fetch_post_counts(session, posts_for_scores.keys())
+        hot_scores = _compute_hot_scores(
+            posts_for_scores.values(), comment_counts, vote_scores
+        )
+
+        if sort == "hot":
+            posts_list = sorted(
+                hot_candidates_feed,
+                key=lambda p: hot_scores.get(p.id, 0.0),
+                reverse=True,
+            )[:POST_LIST_LIMIT]
+
+        hot_posts = sorted(
+            hot_candidates_all,
+            key=lambda p: hot_scores.get(p.id, 0.0),
+            reverse=True,
+        )[:HOT_LIST_LIMIT]
 
     tag_counts: dict[str, int] = {}
-    for p in all_posts:
+    for p in posts_list:
         for t in (p.tags or []):
             tag_counts[t] = tag_counts.get(t, 0) + 1
 
@@ -102,8 +188,8 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
     ]
 
     stats = {
-        "post_count": len(all_posts),
-        "board_count": len(boards_list),
+        "post_count": post_count,
+        "board_count": board_count,
         "agent_count": agent_count,
     }
 
@@ -129,13 +215,20 @@ def index(request: Request, sort: str = "latest", board: str | None = None):
 
 def _shared_square_stats(session: Session):
     demo_agent_ids = get_demo_agent_ids(session)
-    skills_all = session.exec(select(Skill).order_by(Skill.id.desc())).all()
-    skills_list = [s for s in skills_all if s.owner_id not in demo_agent_ids]
-    posts_all = session.exec(select(Post)).all()
-    post_count = len([p for p in posts_all if p.author_id not in demo_agent_ids])
-    board_count = len(session.exec(select(Board)).all())
-    agents_all = session.exec(select(User).where(User.role == RoleEnum.agent)).all()
-    agent_count = len([a for a in agents_all if a.id not in demo_agent_ids])
+    skills_stmt = select(Skill).order_by(Skill.id.desc())
+    skills_stmt = _exclude_demo(skills_stmt, demo_agent_ids, Skill.owner_id)
+    skills_list = session.exec(skills_stmt).all()
+
+    post_count_stmt = _exclude_demo(
+        select(func.count()).select_from(Post), demo_agent_ids, Post.author_id
+    )
+    post_count = _scalar(session, post_count_stmt)
+    board_count = _scalar(session, select(func.count()).select_from(Board))
+    agent_count_stmt = select(func.count()).select_from(User).where(
+        User.role == RoleEnum.agent
+    )
+    agent_count_stmt = _exclude_demo(agent_count_stmt, demo_agent_ids, User.id)
+    agent_count = _scalar(session, agent_count_stmt)
     return skills_list, {
         "post_count": post_count,
         "board_count": board_count,
@@ -193,21 +286,42 @@ def post_detail(post_id: int, request: Request):
             if post
             else []
         )
-        hot_posts = (
-            [
-                p
-                for p in session.exec(select(Post).where(Post.id != post_id)).all()
-                if p.author_id not in demo_agent_ids
-            ]
-            if post
-            else []
+
+        hot_candidates_stmt = select(Post)
+        if post:
+            hot_candidates_stmt = hot_candidates_stmt.where(Post.id != post_id)
+        hot_candidates_stmt = _exclude_demo(
+            hot_candidates_stmt, demo_agent_ids, Post.author_id
         )
-        post_count = len([p for p in session.exec(select(Post)).all() if p.author_id not in demo_agent_ids])
-        board_count = len(session.exec(select(Board)).all())
-        agent_count = len([
-            a for a in session.exec(select(User).where(User.role == RoleEnum.agent)).all()
-            if a.id not in demo_agent_ids
-        ])
+        hot_candidates = session.exec(
+            hot_candidates_stmt.order_by(Post.created_at.desc()).limit(HOT_CANDIDATE_LIMIT)
+        ).all()
+
+        post_count_stmt = _exclude_demo(
+            select(func.count()).select_from(Post), demo_agent_ids, Post.author_id
+        )
+        post_count = _scalar(session, post_count_stmt)
+        board_count = _scalar(session, select(func.count()).select_from(Board))
+        agent_count_stmt = select(func.count()).select_from(User).where(
+            User.role == RoleEnum.agent
+        )
+        agent_count_stmt = _exclude_demo(agent_count_stmt, demo_agent_ids, User.id)
+        agent_count = _scalar(session, agent_count_stmt)
+
+        hot_scores = {}
+        hot_posts = []
+        if hot_candidates:
+            comment_counts, vote_scores = _fetch_post_counts(
+                session, [p.id for p in hot_candidates if p.id is not None]
+            )
+            hot_scores = _compute_hot_scores(
+                hot_candidates, comment_counts, vote_scores
+            )
+            hot_posts = sorted(
+                hot_candidates,
+                key=lambda x: hot_scores.get(x.id, 0.0),
+                reverse=True,
+            )[:HOT_LIST_LIMIT]
 
         post_comment_count = len(comments) if post else 0
         post_vote_score = sum(int(v.value or 0) for v in votes) if post else 0
@@ -221,27 +335,6 @@ def post_detail(post_id: int, request: Request):
             if post
             else 0.0
         )
-
-        hot_scores = {}
-        if hot_posts:
-            ids = [p.id for p in hot_posts if p.id is not None]
-            comment_counts = {}
-            vote_scores = {}
-            if ids:
-                hs_comments = session.exec(select(Comment).where(Comment.post_id.in_(ids))).all()
-                for c in hs_comments:
-                    comment_counts[c.post_id] = comment_counts.get(c.post_id, 0) + 1
-                hs_votes = session.exec(select(PostVote).where(PostVote.post_id.in_(ids))).all()
-                for v in hs_votes:
-                    vote_scores[v.post_id] = vote_scores.get(v.post_id, 0) + int(v.value or 0)
-            for p in hot_posts:
-                hot_scores[p.id] = compute_hot_score(
-                    p.finance_score,
-                    vote_scores.get(p.id, 0),
-                    comment_counts.get(p.id, 0),
-                    p.created_at,
-                )
-            hot_posts = sorted(hot_posts, key=lambda x: hot_scores.get(x.id, 0.0), reverse=True)[:6]
 
     return templates.TemplateResponse(
         "post_detail.html",

@@ -18,6 +18,13 @@ body {
   color: var(--text);
 }
 a { color: var(--accent); text-decoration: none; }
+html, body {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.08);
+}
+a, button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.08);
+}
 
 h1, h2, h3, .brand-name {
   font-family: 'Georgia', 'Times New Roman', 'Songti SC', 'SimSun', serif;
@@ -65,7 +72,8 @@ h1, h2, h3, .brand-name {
 }
 .nav-item { color: var(--muted); }
 .nav-item:visited { color: var(--muted); }
-.nav-item.active { color: var(--text); font-weight: 600; }
+.nav-item.active,
+.nav-item.pending-active { color: var(--text); font-weight: 600; }
 .topbar-right { display: flex; align-items: center; gap: 12px; justify-self: end; }
 .topbar-stats {
   display: flex;
@@ -109,7 +117,8 @@ h1, h2, h3, .brand-name {
 .section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 18px; }
 .section-actions { display: flex; gap: 8px; }
 .pill { padding: 4px 10px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
-.pill.active { color: var(--text); background: rgba(198,134,44,0.12); }
+.pill.active,
+.pill.pending-active { color: var(--text); background: rgba(198,134,44,0.12); }
 .feed { display: flex; flex-direction: column; gap: 16px; }
 .post-card {
   background: var(--panel);
@@ -191,7 +200,8 @@ h1, h2, h3, .brand-name {
 .mobile-feed { padding: 16px; display: grid; gap: 16px; }
 .mobile-tabs { display: flex; gap: 8px; margin: 6px 0 12px; }
 .tab { flex: 1; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); font-size: 13px; }
-.tab.active { background: rgba(198,134,44,0.12); color: var(--text); }
+.tab.active,
+.tab.pending-active { background: rgba(198,134,44,0.12); color: var(--text); }
 .m-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px; box-shadow: var(--shadow); }
 .m-head { display: flex; align-items: center; gap: 10px; }
 .m-author { flex: 1; }
@@ -336,9 +346,27 @@ h1, h2, h3, .brand-name {
 .mobile-nav-label {
   line-height: 1.1;
 }
-.mobile-nav-item.active {
+.mobile-nav-item.active,
+.mobile-nav-item.pending-active {
   color: var(--text);
   background: rgba(198,134,44,0.12);
+}
+
+body.page-switching::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(166, 107, 28, 0.12) 0%, rgba(166, 107, 28, 0.5) 45%, rgba(166, 107, 28, 0.12) 100%);
+  z-index: 999;
+}
+body.page-switching .mobile-feed,
+body.page-switching .skills-page,
+body.page-switching .detail-grid {
+  opacity: 0.82;
+  transition: opacity 0.12s ease;
 }
 
 .muted { color: var(--muted); font-size: 12px; }
