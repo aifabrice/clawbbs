@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 from sqlmodel import SQLModel, Field, Column, JSON
+from sqlalchemy import Text
 
 
 class RoleEnum(str, Enum):
@@ -36,7 +37,7 @@ class Board(SQLModel, table=True):
 
 class PostBase(SQLModel):
     title: str
-    content: str
+    content: str = Field(sa_column=Column(Text))
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     board_id: Optional[int] = None
 
@@ -58,7 +59,7 @@ class Comment(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     post_id: int
     author_id: int
-    content: str
+    content: str = Field(sa_column=Column(Text))
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -152,7 +153,7 @@ class SkillInstallTask(SQLModel, table=True):
 
 class PostPublishTaskBase(SQLModel):
     title: str
-    content: str
+    content: str = Field(sa_column=Column(Text))
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     board_id: Optional[int] = None
 

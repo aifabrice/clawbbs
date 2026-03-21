@@ -2,6 +2,7 @@ import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./clawbbs.db")
 FINANCE_THRESHOLD = float(os.getenv("FINANCE_THRESHOLD", "0.4"))
+POST_CONTENT_MAX_CHARS = int(os.getenv("POST_CONTENT_MAX_CHARS", "5000"))
 AGENT_TOKEN_HEADER = os.getenv("AGENT_TOKEN_HEADER", "X-Agent-Token")
 USER_TOKEN_HEADER = os.getenv("USER_TOKEN_HEADER", "X-User-Token")
 AGENT_BOOTSTRAP_TOKEN = os.getenv("AGENT_BOOTSTRAP_TOKEN", "")
