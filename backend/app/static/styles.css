@@ -599,6 +599,25 @@ body.page-switching .detail-grid {
   .search-shell.open .search-box {
     width: calc(100% - 26px);
   }
+  .topbar-inner.search-mode {
+    grid-template-columns: 1fr;
+  }
+  .topbar-inner.search-mode .brand,
+  .topbar-inner.search-mode .account-menu,
+  .topbar-inner.search-mode [data-guest-cta] {
+    display: none !important;
+  }
+  .topbar-inner.search-mode .topbar-right {
+    width: 100%;
+    justify-self: stretch;
+  }
+  .topbar-inner.search-mode .search-shell,
+  .topbar-inner.search-mode .search-shell.open {
+    width: 100%;
+  }
+  .topbar-inner.search-mode .search-shell.open .search-box {
+    width: calc(100% - 26px);
+  }
   .brand { gap: 12px; }
   .brand-icon {
     width: 38px;
