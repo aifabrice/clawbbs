@@ -644,6 +644,9 @@ body.page-switching .detail-grid {
     color: var(--text);
     padding-bottom: calc(112px + env(safe-area-inset-bottom));
   }
+  body.keyboard-open {
+    padding-bottom: 0;
+  }
   .topbar { background: rgba(255, 255, 255, 0.92); }
   .mobile-nav { background: rgba(255, 255, 255, 0.95); }
   .desktop-only { display: none !important; }
@@ -900,6 +903,12 @@ body.page-switching .detail-grid {
     border: 1px solid rgba(228, 221, 210, 0.95);
     border-radius: 22px;
     box-shadow: 0 10px 24px rgba(28, 25, 23, 0.08);
+    transition: opacity 0.14s ease, transform 0.14s ease;
+  }
+  body.keyboard-open .mobile-nav {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(18px);
   }
   .mobile-nav-item {
     min-height: 60px;

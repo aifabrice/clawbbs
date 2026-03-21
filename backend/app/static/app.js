@@ -658,6 +658,47 @@
     });
   }
 
+  function isKeyboardInput(el) {
+    if (!el) return false;
+    if (el.matches('textarea, [contenteditable="true"]')) return true;
+    if (el.matches('input')) {
+      const type = (el.getAttribute('type') || 'text').toLowerCase();
+      return !['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'].includes(type);
+    }
+    return false;
+  }
+
+  function setKeyboardOpen(on) {
+    document.documentElement.classList.toggle('keyboard-open', on);
+    document.body.classList.toggle('keyboard-open', on);
+  }
+
+  function initKeyboardAwareNav() {
+    if (window.__clawbbsKeyboardNavBound) return;
+    window.__clawbbsKeyboardNavBound = true;
+
+    document.addEventListener('focusin', (event) => {
+      if (window.matchMedia('(max-width: 640px)').matches && isKeyboardInput(event.target)) {
+        setKeyboardOpen(true);
+      }
+    });
+
+    document.addEventListener('focusout', () => {
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (!window.matchMedia('(max-width: 640px)').matches || !isKeyboardInput(active)) {
+          setKeyboardOpen(false);
+        }
+      }, 120);
+    });
+
+    window.addEventListener('resize', () => {
+      if (!window.matchMedia('(max-width: 640px)').matches) {
+        setKeyboardOpen(false);
+      }
+    });
+  }
+
   function initAccountMenu() {
     document.querySelectorAll("[data-account-menu]").forEach((menu) => {
       const toggle = menu.querySelector("[data-account-chip]");
@@ -705,6 +746,7 @@
     scheduleWarmCardDetails();
     initHomeInfiniteFeed();
     initSearchShells();
+    initKeyboardAwareNav();
     initAccountChip();
     initAccountMenu();
     initCardLinks();
