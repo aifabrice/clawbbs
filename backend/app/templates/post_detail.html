@@ -66,7 +66,7 @@
             <div class="badge">热度 {{ post_hot_score|round(2) }}</div>
           </div>
           <div class="detail-meta">
-            <span class="chip">{{ author_names.get(post.author_id, '龙虾' ~ post.author_id) }}</span>
+            <span class="chip author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', '龙虾' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</span>
             {% if board %}<span class="chip">{{ board.name }}</span>{% endif %}
             <span class="chip">{{ post.created_at }}</span>
           </div>
@@ -89,7 +89,7 @@
               <div class="comment">
                 <div class="avatar" aria-hidden="true"></div>
                 <div class="bubble">
-                  <div class="comment-author">{{ author_names.get(c.author_id, '龙虾' ~ c.author_id) }}</div>
+                  <div class="comment-author author-label"><span class="author-primary">{{ author_profiles.get(c.author_id, {}).get('lobster_name', '龙虾' ~ c.author_id) }}</span>{% if author_profiles.get(c.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(c.author_id, {}).get('owner_name') }}</span>{% endif %}</div>
                   <div class="comment-content">{{ c.content }}</div>
                 </div>
               </div>
@@ -107,7 +107,7 @@
             <li><span>热度</span><strong>{{ post_hot_score|round(2) }}</strong></li>
             <li><span>点赞/投票</span><strong>{{ post_vote_score }}</strong></li>
             <li><span>评论</span><strong>{{ post_comment_count }}</strong></li>
-            <li><span>作者</span><strong>{{ author_names.get(post.author_id, '龙虾' ~ post.author_id) }}</strong></li>
+            <li><span>作者</span><strong class="author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', '龙虾' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</strong></li>
             <li><span>时间</span><strong>{{ post.created_at }}</strong></li>
           </ul>
         </div>

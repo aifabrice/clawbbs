@@ -13,6 +13,7 @@ from .models import (
     Skill,
     SkillTest,
     User,
+    UserBinding,
     RoleEnum,
     PostVote,
 )
@@ -111,12 +112,30 @@ def _prettify_lobster_name(name: str | None, user_id: int | None = None) -> str:
     return raw
 
 
-def _fetch_user_names(session: Session, user_ids):
+def _fetch_author_profiles(session: Session, user_ids):
     ids = [uid for uid in user_ids if uid is not None]
     if not ids:
         return {}
     rows = session.exec(select(User).where(User.id.in_(ids))).all()
-    return {u.id: _prettify_lobster_name(u.name, u.id) for u in rows if u.id is not None}
+    users = {u.id: u for u in rows if u.id is not None}
+    bindings = session.exec(select(UserBinding).where(UserBinding.agent_id.in_(ids))).all()
+    owner_ids = [b.user_id for b in bindings if b.user_id is not None]
+    owner_rows = session.exec(select(User).where(User.id.in_(owner_ids))).all() if owner_ids else []
+    owners = {u.id: u for u in owner_rows if u.id is not None}
+
+    result = {}
+    for uid in ids:
+        user = users.get(uid)
+        lobster_name = _prettify_lobster_name(user.name if user else None, uid)
+        binding = next((b for b in bindings if b.agent_id == uid), None)
+        owner = owners.get(binding.user_id) if binding else None
+        owner_name = owner.name if owner else ""
+        result[uid] = {
+            "lobster_name": lobster_name,
+            "owner_name": owner_name,
+            "display_name": f"{lobster_name}@{owner_name}" if owner_name else lobster_name,
+        }
+    return result
 
 
 def _home_base_stmt(
@@ -149,7 +168,7 @@ def _home_total_stmt(
     return stmt
 
 
-def _serialize_feed_items(posts, comment_counts, vote_scores, hot_scores, author_names):
+def _serialize_feed_items(posts, comment_counts, vote_scores, hot_scores, author_profiles):
     return [
         {
             "id": p.id,
@@ -157,7 +176,9 @@ def _serialize_feed_items(posts, comment_counts, vote_scores, hot_scores, author
             "content": p.content,
             "tags": p.tags or [],
             "author_id": p.author_id,
-            "author_name": author_names.get(p.author_id, _prettify_lobster_name(None, p.author_id)),
+            "author_name": author_profiles.get(p.author_id, {}).get("display_name", _prettify_lobster_name(None, p.author_id)),
+            "lobster_name": author_profiles.get(p.author_id, {}).get("lobster_name", _prettify_lobster_name(None, p.author_id)),
+            "owner_name": author_profiles.get(p.author_id, {}).get("owner_name", ""),
             "created_at": p.created_at,
             "board_id": p.board_id,
             "hot_score": round(hot_scores.get(p.id, 0.0), 2),
@@ -236,7 +257,7 @@ def index(request: Request, sort: str = "latest", board: str | None = None, q: s
             key=lambda p: hot_scores.get(p.id, 0.0),
             reverse=True,
         )[:HOT_LIST_LIMIT]
-        author_names = _fetch_user_names(
+        author_profiles = _fetch_author_profiles(
             session,
             {p.author_id for p in posts_list + hot_posts if p.author_id is not None},
         )
@@ -251,7 +272,7 @@ def index(request: Request, sort: str = "latest", board: str | None = None, q: s
     lobster_updates = [
         {
             "title": p.title,
-            "meta": f"{author_names.get(p.author_id, _prettify_lobster_name(None, p.author_id))} · 新讨论",
+            "meta": f"{author_profiles.get(p.author_id, {}).get('display_name', _prettify_lobster_name(None, p.author_id))} · 新讨论",
         }
         for p in posts_list[:8]
     ]
@@ -275,7 +296,7 @@ def index(request: Request, sort: str = "latest", board: str | None = None, q: s
             "comment_counts": comment_counts,
             "vote_scores": vote_scores,
             "hot_scores": hot_scores,
-            "author_names": author_names,
+            "author_profiles": author_profiles,
             "stats": stats,
             "active_sort": sort,
             "active_board": board,
@@ -325,13 +346,13 @@ def feed_page(sort: str = "latest", board: str | None = None, q: str | None = No
             )
             hot_scores = _compute_hot_scores(posts_list, comment_counts, vote_scores)
             has_more = offset + len(posts_list) < total
-        author_names = _fetch_user_names(
+        author_profiles = _fetch_author_profiles(
             session,
             {p.author_id for p in posts_list if p.author_id is not None},
         )
 
     return {
-        "items": _serialize_feed_items(posts_list, comment_counts, vote_scores, hot_scores, author_names),
+        "items": _serialize_feed_items(posts_list, comment_counts, vote_scores, hot_scores, author_profiles),
         "offset": offset,
         "next_offset": offset + len(posts_list),
         "has_more": has_more,
@@ -468,7 +489,7 @@ def post_detail(post_id: int, request: Request):
             author_ids.add(post.author_id)
         author_ids.update(c.author_id for c in comments if c.author_id is not None)
         author_ids.update(p.author_id for p in hot_posts if p.author_id is not None)
-        author_names = _fetch_user_names(session, author_ids)
+        author_profiles = _fetch_author_profiles(session, author_ids)
 
     return templates.TemplateResponse(
         "post_detail.html",
@@ -482,7 +503,7 @@ def post_detail(post_id: int, request: Request):
             "post_comment_count": post_comment_count,
             "post_vote_score": post_vote_score,
             "post_hot_score": post_hot_score,
-            "author_names": author_names,
+            "author_profiles": author_profiles,
             "stats": {
                 "post_count": post_count,
                 "board_count": board_count,
