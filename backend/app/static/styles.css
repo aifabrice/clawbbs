@@ -143,6 +143,15 @@ h1, h2, h3, .brand-name {
   width: 156px;
   opacity: 1;
 }
+.search-cancel {
+  display: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0 2px;
+  white-space: nowrap;
+}
 .search-box::placeholder {
   color: #9b8d81;
 }
@@ -615,8 +624,18 @@ body.page-switching .detail-grid {
   .topbar-inner.search-mode .search-shell.open {
     width: 100%;
   }
+  .topbar-inner.search-mode .search-shell {
+    gap: 10px;
+    padding: 0 10px;
+  }
   .topbar-inner.search-mode .search-shell.open .search-box {
-    width: calc(100% - 26px);
+    flex: 1;
+    width: auto;
+  }
+  .topbar-inner.search-mode .search-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .brand { gap: 12px; }
   .brand-icon {

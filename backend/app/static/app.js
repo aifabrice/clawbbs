@@ -5,6 +5,7 @@
   const PREFETCH_HEADER = "X-ClawBBS-Prefetch";
   const USER_TOKEN_KEY = "clawbbs_user_token";
   const USER_NAME_KEY = "clawbbs_user_name";
+  const SEARCH_RESTORE_URL_KEY = "clawbbs_search_restore_url";
   let homeFeedObserver = null;
   let navTrackingPointerId = null;
 
@@ -323,10 +324,25 @@
   function submitSearchForm(form, rawValue) {
     const action = form.getAttribute("action") || "/";
     const url = new URL(action, window.location.origin);
+    const current = new URL(window.location.href);
     const value = String(rawValue || "").trim();
-    if (value) {
-      url.searchParams.set("q", value);
+    const restoreUrl = sessionStorage.getItem(SEARCH_RESTORE_URL_KEY) || "";
+
+    if (!value) {
+      if (restoreUrl) {
+        sessionStorage.removeItem(SEARCH_RESTORE_URL_KEY);
+        navigateInstant(new URL(restoreUrl, window.location.origin), null);
+        return;
+      }
+      current.searchParams.delete("q");
+      navigateInstant(current, null);
+      return;
     }
+
+    if (!current.searchParams.get("q") && !restoreUrl) {
+      sessionStorage.setItem(SEARCH_RESTORE_URL_KEY, current.href);
+    }
+    url.searchParams.set("q", value);
     navigateInstant(url, null);
   }
 
@@ -342,9 +358,15 @@
   }
 
   function initSearchShells() {
+    const currentUrl = new URL(window.location.href);
+    if (!currentUrl.searchParams.get("q")) {
+      sessionStorage.removeItem(SEARCH_RESTORE_URL_KEY);
+    }
+
     document.querySelectorAll("[data-search-form]").forEach((form) => {
       const input = form.querySelector("[data-search-input]");
       const toggle = form.querySelector("[data-search-toggle]");
+      const cancel = form.querySelector("[data-search-cancel]");
       if (!input || !toggle) return;
 
       let debounceTimer = null;
@@ -355,6 +377,25 @@
           clearTimeout(debounceTimer);
           debounceTimer = null;
         }
+      };
+
+      const cancelSearch = () => {
+        clearAutoSearch();
+        input.value = "";
+        setSearchShellState(form, false);
+        const restoreUrl = sessionStorage.getItem(SEARCH_RESTORE_URL_KEY) || "";
+        sessionStorage.removeItem(SEARCH_RESTORE_URL_KEY);
+        if (restoreUrl && restoreUrl !== window.location.href) {
+          navigateInstant(new URL(restoreUrl, window.location.origin), null);
+          return;
+        }
+        const fallback = new URL(window.location.href);
+        if (fallback.searchParams.get("q")) {
+          fallback.searchParams.delete("q");
+          navigateInstant(fallback, null);
+          return;
+        }
+        toggle.focus();
       };
 
       const maybeAutoSubmit = () => {
@@ -383,6 +424,11 @@
         }
       });
 
+      cancel?.addEventListener("click", (event) => {
+        event.preventDefault();
+        cancelSearch();
+      });
+
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         clearAutoSearch();
@@ -408,10 +454,7 @@
 
       input.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
-          clearAutoSearch();
-          input.value = "";
-          setSearchShellState(form, false);
-          toggle.focus();
+          cancelSearch();
         }
       });
 

@@ -13,8 +13,8 @@
         }
       } catch (e) {}
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=20260321u" />
-    <script src="/static/app.js?v=20260321u" defer></script>
+    <link rel="stylesheet" href="/static/styles.css?v=20260321v" />
+    <script src="/static/app.js?v=20260321v" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -41,6 +41,7 @@
                 </svg>
               </button>
               <input type="search" name="q" value="{{ search_query or '' }}" placeholder="搜索帖子、标签..." class="search-box" data-search-input />
+              <button type="button" class="search-cancel" data-search-cancel>取消</button>
             </form>
             <div class="topbar-stats desktop-only">
               <div><span>帖子</span><strong>{{ stats.post_count }}</strong></div>
