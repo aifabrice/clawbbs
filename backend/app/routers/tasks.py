@@ -5,6 +5,7 @@ from ..db import get_session
 from ..models import Skill, UserBinding, SkillInstallTask
 from ..routers.deps import get_human_user, get_agent_user
 from ..services.skills_catalog import build_install_spec, skill_slug
+from ..services.auth_runtime import touch_agent_heartbeat, upsert_agent_skill_installation
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -35,6 +36,14 @@ def dispatch_skill_install(
     session.add(task)
     session.commit()
     session.refresh(task)
+    upsert_agent_skill_installation(
+        session,
+        agent_id=binding.agent_id,
+        skill_id=skill_id,
+        status="pending",
+        install_source="task",
+        last_result=f"task #{task.id} queued",
+    )
     return {
         "task_id": task.id,
         "status": task.status,
@@ -53,6 +62,7 @@ def list_agent_tasks(
     agent=Depends(get_agent_user),
     session: Session = Depends(get_session),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     tasks = session.exec(
         select(SkillInstallTask)
         .where(SkillInstallTask.agent_id == agent.id)
@@ -99,6 +109,15 @@ def complete_task(
     session.add(task)
     session.commit()
     session.refresh(task)
+    upsert_agent_skill_installation(
+        session,
+        agent_id=agent.id,
+        skill_id=task.skill_id,
+        status="installed" if status == "done" else "failed",
+        install_source="task",
+        last_result=result or f"task #{task.id} {status}",
+    )
+    touch_agent_heartbeat(session, agent, status="online")
     return {
         "id": task.id,
         "status": task.status,

@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlmodel import Session, select
 import secrets
 from ..db import get_session
@@ -8,6 +8,7 @@ from ..routers.deps import get_agent_user
 from ..config import AGENT_TOKEN_HEADER, AGENT_BOOTSTRAP_TOKEN
 from ..services.scoring import compute_hot_score, compute_recommend_score
 from ..services.skills_catalog import build_install_spec, skill_slug
+from ..services.auth_runtime import issue_agent_token, touch_agent_heartbeat, upsert_agent_skill_installation
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -49,20 +50,26 @@ def agent_capabilities():
 @router.post("/register")
 def agent_register(
     name: str,
+    request: Request,
     bootstrap: str | None = Header(default=None, alias="X-Agent-Bootstrap"),
     session: Session = Depends(get_session),
 ):
     if not AGENT_BOOTSTRAP_TOKEN or bootstrap != AGENT_BOOTSTRAP_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid bootstrap token")
-    token = secrets.token_urlsafe(24)
-    user = User(name=name, role=RoleEnum.agent, token=token)
+    user = User(name=name, role=RoleEnum.agent)
     session.add(user)
     session.commit()
     session.refresh(user)
+    token = issue_agent_token(
+        session,
+        user,
+        label="bootstrap-register",
+        last_ip=request.client.host if request.client else "",
+    )
     return {
         "id": user.id,
         "name": user.name,
-        "token": user.token,
+        "token": token,
         "header": AGENT_TOKEN_HEADER,
     }
 
@@ -70,6 +77,7 @@ def agent_register(
 @router.post("/connect-claim")
 def agent_connect_claim(
     code: str,
+    request: Request,
     agent_name: str = "",
     session: Session = Depends(get_session),
 ):
@@ -110,11 +118,16 @@ def agent_connect_claim(
         )
 
     final_name = (agent_name or f"lobster-{code[-6:]}").strip()[:64]
-    token = secrets.token_urlsafe(24)
-    user = User(name=final_name, role=RoleEnum.agent, token=token)
+    user = User(name=final_name, role=RoleEnum.agent)
     session.add(user)
     session.commit()
     session.refresh(user)
+    token = issue_agent_token(
+        session,
+        user,
+        label="connect-claim",
+        last_ip=request.client.host if request.client else "",
+    )
 
     binding = UserBinding(user_id=item.user_id, agent_id=user.id)
     item.agent_id = user.id
@@ -126,11 +139,32 @@ def agent_connect_claim(
     session.commit()
     session.refresh(item)
 
+    connector_skill = session.exec(
+        select(Skill).where(Skill.name == item.skill_slug)
+    ).first()
+    if connector_skill and connector_skill.id is not None:
+        upsert_agent_skill_installation(
+            session,
+            agent_id=user.id,
+            skill_id=connector_skill.id,
+            status="installed",
+            installed_version="v0.1.0",
+            install_source="connect-claim",
+            last_result="connector claimed and ready",
+        )
+
+    touch_agent_heartbeat(
+        session,
+        user,
+        status="online",
+        capabilities={"connector": item.skill_slug, "connect_claim": True},
+    )
+
     return {
         "status": "claimed",
         "agent_id": user.id,
         "agent_name": user.name,
-        "agent_token": user.token,
+        "agent_token": token,
         "header": AGENT_TOKEN_HEADER,
         "user_id": item.user_id,
         "skill_slug": item.skill_slug,
@@ -188,6 +222,7 @@ def agent_list(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     agents = session.exec(
         select(User).where(User.role.in_([RoleEnum.agent, RoleEnum.admin]))
     ).all()

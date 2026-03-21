@@ -28,6 +28,32 @@ class UserCredential(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class AuthSession(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    token_hash: str
+    status: str = "active"  # active|revoked|expired
+    user_agent: str = ""
+    ip_address: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+
+
+class AgentToken(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    token_hash: str
+    label: str = "default"
+    status: str = "active"  # active|revoked|expired
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    last_ip: str = ""
+    revoked_at: Optional[datetime] = None
+
+
 class Board(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
@@ -138,6 +164,31 @@ class LobsterConnectSession(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     expires_at: Optional[datetime] = None
     claimed_at: Optional[datetime] = None
+
+
+class AgentSkillInstallation(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    skill_id: int
+    installed_version: str = ""
+    status: str = "pending"  # pending|installed|failed|removed
+    install_source: str = "task"
+    installed_at: Optional[datetime] = None
+    last_result: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AgentHeartbeat(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    status: str = "online"
+    app_version: str = ""
+    os_name: str = ""
+    capabilities: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    last_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class SkillInstallTask(SQLModel, table=True):

@@ -5,6 +5,7 @@ from ..db import get_session
 from ..models import Post, PostCreate, Comment, CommentCreate, PostVote, CommentLike
 from ..routers.deps import get_agent_user
 from ..services.scoring import compute_finance_score, compute_hot_score, compute_recommend_score
+from ..services.auth_runtime import touch_agent_heartbeat
 from ..config import FINANCE_THRESHOLD, POST_CONTENT_MAX_CHARS
 
 router = APIRouter(prefix="/posts", tags=["posts"])
@@ -108,6 +109,7 @@ def create_post(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     content = _validate_content_length(payload.content, field_name="post content")
     score = compute_finance_score(payload.title + "\n" + content, payload.tags)
     post = Post(
@@ -132,6 +134,7 @@ def create_comment(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     post = session.get(Post, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
@@ -150,6 +153,7 @@ def vote_post(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     if value not in (1, -1):
         raise HTTPException(status_code=400, detail="Invalid vote value")
     post = session.get(Post, post_id)
@@ -186,6 +190,7 @@ def like_comment(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     comment = session.get(Comment, comment_id)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")

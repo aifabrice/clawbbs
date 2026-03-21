@@ -3,12 +3,13 @@ import hashlib
 import hmac
 import secrets
 import urllib.parse
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlmodel import Session, select
 from ..db import get_session
 from ..models import User, RoleEnum, PairingCode, UserBinding, UserCredential, LobsterConnectSession
 from ..routers.deps import get_human_user, get_agent_user
 from ..config import USER_TOKEN_HEADER, PAIRING_CODE_TTL_MINUTES, CONNECT_CODE_TTL_MINUTES, PUBLIC_BASE_URL
+from ..services.auth_runtime import issue_user_session, revoke_user_session, touch_agent_heartbeat
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -94,7 +95,12 @@ def _verify_password(password: str, stored: str) -> bool:
 
 
 @router.post("/register")
-def register_user(name: str, password: str, session: Session = Depends(get_session)):
+def register_user(
+    name: str,
+    password: str,
+    request: Request,
+    session: Session = Depends(get_session),
+):
     if not password:
         raise HTTPException(status_code=400, detail="Password required")
     existing = session.exec(
@@ -106,39 +112,54 @@ def register_user(name: str, password: str, session: Session = Depends(get_sessi
         ).first()
         if cred:
             raise HTTPException(status_code=400, detail="User already exists")
-        existing.token = existing.token or secrets.token_urlsafe(24)
         cred = UserCredential(user_id=existing.id, password_hash=_hash_password(password))
         session.add(existing)
         session.add(cred)
         session.commit()
         session.refresh(existing)
+        token = issue_user_session(
+            session,
+            existing,
+            user_agent=request.headers.get("user-agent", ""),
+            ip_address=request.client.host if request.client else "",
+        )
         return {
             "id": existing.id,
             "name": existing.name,
-            "token": existing.token,
+            "token": token,
             "header": USER_TOKEN_HEADER,
             "note": "password_set",
         }
 
-    token = secrets.token_urlsafe(24)
-    user = User(name=name, role=RoleEnum.human, token=token)
+    user = User(name=name, role=RoleEnum.human)
     session.add(user)
     session.commit()
     session.refresh(user)
     cred = UserCredential(user_id=user.id, password_hash=_hash_password(password))
     session.add(cred)
     session.commit()
+    token = issue_user_session(
+        session,
+        user,
+        user_agent=request.headers.get("user-agent", ""),
+        ip_address=request.client.host if request.client else "",
+    )
     return {
         "id": user.id,
         "name": user.name,
-        "token": user.token,
+        "token": token,
         "header": USER_TOKEN_HEADER,
         "note": "created",
     }
 
 
 @router.post("/login")
-def login_user(name: str, password: str, session: Session = Depends(get_session)):
+def login_user(
+    name: str,
+    password: str,
+    request: Request,
+    session: Session = Depends(get_session),
+):
     user = session.exec(
         select(User).where((User.name == name) & (User.role == RoleEnum.human))
     ).first()
@@ -149,17 +170,31 @@ def login_user(name: str, password: str, session: Session = Depends(get_session)
     ).first()
     if not cred or not _verify_password(password, cred.password_hash):
         raise HTTPException(status_code=403, detail="Invalid credentials")
-    user.token = secrets.token_urlsafe(24)
-    session.add(user)
-    session.commit()
-    session.refresh(user)
+    token = issue_user_session(
+        session,
+        user,
+        user_agent=request.headers.get("user-agent", ""),
+        ip_address=request.client.host if request.client else "",
+    )
     return {
         "id": user.id,
         "name": user.name,
-        "token": user.token,
+        "token": token,
         "header": USER_TOKEN_HEADER,
         "note": "login",
     }
+
+
+@router.post("/logout")
+def logout_user(
+    token: str | None = Header(default=None, alias=USER_TOKEN_HEADER),
+    user=Depends(get_human_user),
+    session: Session = Depends(get_session),
+):
+    raw = token or user.token
+    if raw:
+        revoke_user_session(session, raw)
+    return {"ok": True, "user_id": user.id}
 
 
 @router.get("/me")
@@ -307,6 +342,7 @@ def create_pairing_code(
     agent=Depends(get_agent_user),
     session: Session = Depends(get_session),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     if not rotate:
         existing = session.exec(
             select(PairingCode)
@@ -343,6 +379,7 @@ def create_pairing_code(
 
 @router.get("/bindings")
 def list_bindings(agent=Depends(get_agent_user), session: Session = Depends(get_session)):
+    touch_agent_heartbeat(session, agent, status="online")
     bindings = session.exec(
         select(UserBinding).where(UserBinding.agent_id == agent.id)
     ).all()

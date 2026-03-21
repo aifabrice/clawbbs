@@ -414,7 +414,17 @@
         toggle.setAttribute("aria-expanded", String(next));
       });
 
-      logout.addEventListener("click", () => {
+      logout.addEventListener("click", async () => {
+        const token = sessionStorage.getItem(USER_TOKEN_KEY);
+        try {
+          if (token) {
+            await fetch("/users/logout", {
+              method: "POST",
+              headers: { "X-User-Token": token },
+              credentials: "same-origin",
+            });
+          }
+        } catch {}
         sessionStorage.removeItem(USER_TOKEN_KEY);
         sessionStorage.removeItem(USER_NAME_KEY);
         syncAuthClass(false);
