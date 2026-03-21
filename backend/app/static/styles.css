@@ -732,11 +732,11 @@ body.page-switching .detail-grid {
   }
   .mobile-tabs {
     gap: 10px;
-    margin: 8px 0 14px;
+    margin: 6px 0 10px;
   }
   .tab {
-    min-height: 42px;
-    padding: 10px 12px;
+    min-height: 38px;
+    padding: 9px 12px;
     font-size: 13px;
   }
 
