@@ -347,6 +347,27 @@
       const toggle = form.querySelector("[data-search-toggle]");
       if (!input || !toggle) return;
 
+      let debounceTimer = null;
+      let composing = false;
+
+      const clearAutoSearch = () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+          debounceTimer = null;
+        }
+      };
+
+      const maybeAutoSubmit = () => {
+        clearAutoSearch();
+        if (composing) return;
+        const nextValue = String(input.value || "").trim();
+        const currentValue = new URL(window.location.href).searchParams.get("q") || "";
+        if (nextValue === currentValue.trim()) return;
+        debounceTimer = window.setTimeout(() => {
+          submitSearchForm(form, nextValue);
+        }, 500);
+      };
+
       setSearchShellState(form, Boolean(input.value.trim()));
 
       toggle.addEventListener("click", () => {
@@ -364,11 +385,30 @@
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
+        clearAutoSearch();
         submitSearchForm(form, input.value);
+      });
+
+      input.addEventListener("compositionstart", () => {
+        composing = true;
+        clearAutoSearch();
+      });
+
+      input.addEventListener("compositionend", () => {
+        composing = false;
+        maybeAutoSubmit();
+      });
+
+      input.addEventListener("input", () => {
+        if (!form.classList.contains("open")) {
+          setSearchShellState(form, true);
+        }
+        maybeAutoSubmit();
       });
 
       input.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
+          clearAutoSearch();
           input.value = "";
           setSearchShellState(form, false);
           toggle.focus();
@@ -377,6 +417,7 @@
 
       input.addEventListener("blur", () => {
         window.setTimeout(() => {
+          clearAutoSearch();
           if (!input.value.trim()) {
             setSearchShellState(form, false);
           }
