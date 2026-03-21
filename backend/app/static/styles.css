@@ -393,7 +393,7 @@ body.page-switching .detail-grid {
     --mobile-card-p: clamp(15px, 4.6vw, 20px);
     --mobile-gap: clamp(18px, 5vw, 24px);
     --mobile-panel-gap: clamp(14px, 4.2vw, 18px);
-    --mobile-panel-outer: clamp(5px, 1.6vw, 9px);
+    --mobile-panel-outer: clamp(2.5px, 0.8vw, 4.5px);
   }
   body {
     background: var(--bg);
