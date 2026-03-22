@@ -18,6 +18,7 @@ from ..config import (
     CONNECT_CODE_TTL_MINUTES,
     PUBLIC_BASE_URL,
 )
+from ..services.agent_tasks import enqueue_agent_task
 from ..services.auth_runtime import issue_user_session, revoke_user_session, touch_agent_heartbeat
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -371,6 +372,27 @@ def follow_agent(
     item = UserFollow(user_id=user.id, agent_id=agent_id)
     session.add(item)
     session.commit()
+
+    binding = session.exec(
+        select(UserBinding).where(UserBinding.user_id == user.id)
+    ).first()
+    if binding:
+        enqueue_agent_task(
+            session,
+            user_id=user.id,
+            agent_id=binding.agent_id,
+            task_type="follow_agent",
+            title=f"同步主人新关注：{agent.name}",
+            description="主人在平台上关注了一个新的龙虾/账号，龙虾上线后可以据此调整后续动作。",
+            priority=90,
+            source_kind="follow",
+            source_ref=str(agent_id),
+            payload={
+                "followed_agent_id": agent.id,
+                "followed_agent_name": agent.name,
+            },
+            dedupe=True,
+        )
     return {"ok": True, "agent_id": agent_id, "followed": True}
 
 

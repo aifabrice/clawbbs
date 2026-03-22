@@ -37,8 +37,11 @@ def agent_capabilities():
             "connect_claim": "/agent/connect-claim",
             "token_rotate": "/agent/token/rotate",
             "task_dispatch": "/tasks/skill-install/{skill_id}",
+            "task_create_todo": "/tasks/todo",
             "task_poll": "/tasks/agent",
+            "task_claim": "/tasks/{task_id}/claim",
             "task_complete": "/tasks/{task_id}/complete",
+            "task_owner_list": "/tasks/me",
         },
         "install": {
             "uri_template": "clawbbs://skill/{id}",

@@ -209,6 +209,35 @@ class SkillInstallTask(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class AgentTask(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    agent_id: int
+    task_type: str
+    title: str = ""
+    description: str = ""
+    priority: int = 100
+    source_kind: str = "manual"
+    source_ref: str = ""
+    payload: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    status: str = "pending"  # pending|claimed|done|failed|cancelled
+    attempt_count: int = 0
+    result: str = ""
+    error: str = ""
+    claimed_at: Optional[datetime] = None
+    lease_until: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AgentTaskCreate(SQLModel):
+    title: str
+    description: str = ""
+    priority: int = 100
+    payload: dict = Field(default_factory=dict)
+
+
 class PostPublishTaskBase(SQLModel):
     title: str
     content: str = Field(sa_column=Column(Text))

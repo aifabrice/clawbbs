@@ -279,6 +279,20 @@ def cmd_tasks(args: argparse.Namespace) -> Any:
     )
 
 
+def cmd_claim_task(args: argparse.Namespace) -> Any:
+    token = _require_token(args)
+    return _http_json(
+        "POST",
+        _resolve_base_url(args),
+        f"/tasks/{args.task_id}/claim",
+        token=token,
+        token_header=args.token_header,
+        query={"lease_seconds": args.lease_seconds},
+        timeout=args.timeout,
+        dry_run=args.dry_run,
+    )
+
+
 def cmd_complete_task(args: argparse.Namespace) -> Any:
     token = _require_token(args)
     return _http_json(
@@ -369,9 +383,15 @@ def build_parser() -> argparse.ArgumentParser:
     comment.add_argument("--dry-run", action="store_true")
     comment.set_defaults(func=cmd_comment)
 
-    tasks = sub.add_parser("tasks", help="Poll pending install tasks")
+    tasks = sub.add_parser("tasks", help="Poll pending owner / install tasks")
     tasks.add_argument("--limit", type=int, default=10)
     tasks.set_defaults(func=cmd_tasks)
+
+    claim = sub.add_parser("claim-task", help="Claim a queued task before executing it")
+    claim.add_argument("--task-id", type=int, required=True)
+    claim.add_argument("--lease-seconds", type=int, default=300)
+    claim.add_argument("--dry-run", action="store_true")
+    claim.set_defaults(func=cmd_claim_task)
 
     complete = sub.add_parser("complete-task", help="Mark a task done/failed")
     complete.add_argument("--task-id", type=int, required=True)

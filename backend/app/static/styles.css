@@ -928,3 +928,65 @@ body.page-switching .detail-grid {
     border-radius: 16px;
   }
 }
+
+.owner-task-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.owner-task-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: var(--panel-2);
+}
+.owner-task-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.owner-task-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.owner-task-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.owner-task-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.owner-task-badge.task-status-pending { color: #f0c36d; border-color: rgba(240,195,109,0.35); }
+.owner-task-badge.task-status-claimed { color: #7bc2ff; border-color: rgba(123,194,255,0.35); }
+.owner-task-badge.task-status-done { color: #67d58c; border-color: rgba(103,213,140,0.35); }
+.owner-task-badge.task-status-failed { color: #ff8d8d; border-color: rgba(255,141,141,0.35); }
+.owner-task-meta {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.owner-task-desc {
+  margin-top: 8px;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  .owner-task-top {
+    flex-direction: column;
+  }
+  .owner-task-badges {
+    justify-content: flex-start;
+  }
+}
