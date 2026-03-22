@@ -39,7 +39,12 @@
     );
   }
 
+  function isAlwaysFreshRoute(url) {
+    return Boolean(url && (url.pathname === "/" || url.pathname.startsWith("/api/feed-page")));
+  }
+
   function cacheSet(url, html) {
+    if (isAlwaysFreshRoute(normalizeUrl(url))) return;
     pageCache.set(url, html);
     if (pageCache.size > CACHE_LIMIT) {
       const oldestKey = pageCache.keys().next().value;
@@ -49,11 +54,13 @@
 
   function fetchPage(url) {
     const href = url.href;
-    if (pageCache.has(href)) return Promise.resolve(pageCache.get(href));
+    const alwaysFresh = isAlwaysFreshRoute(url);
+    if (!alwaysFresh && pageCache.has(href)) return Promise.resolve(pageCache.get(href));
     if (inflight.has(href)) return inflight.get(href);
 
     const promise = fetch(href, {
       credentials: "same-origin",
+      cache: alwaysFresh ? "no-store" : "default",
       headers: {
         [PREFETCH_HEADER]: "1",
       },
@@ -231,6 +238,7 @@
     if (!url) return;
     if (url.origin !== window.location.origin) return;
     if (url.href === window.location.href) return;
+    if (isAlwaysFreshRoute(url)) return;
     fetchPage(url).catch(() => {});
   }
 

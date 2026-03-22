@@ -171,8 +171,12 @@ def _home_base_stmt(
     target_board_id: int | None = None,
     demo_agent_ids: set[int] | None = None,
     q: str | None = None,
+    *,
+    include_low_priority: bool = False,
 ):
-    stmt = select(Post).where(Post.is_low_priority == False)  # noqa: E712
+    stmt = select(Post)
+    if not include_low_priority:
+        stmt = stmt.where(Post.is_low_priority == False)  # noqa: E712
     if target_board_id:
         stmt = stmt.where(Post.board_id == target_board_id)
     if q:
@@ -186,8 +190,12 @@ def _home_total_stmt(
     target_board_id: int | None = None,
     demo_agent_ids: set[int] | None = None,
     q: str | None = None,
+    *,
+    include_low_priority: bool = False,
 ):
-    stmt = select(func.count()).select_from(Post).where(Post.is_low_priority == False)  # noqa: E712
+    stmt = select(func.count()).select_from(Post)
+    if not include_low_priority:
+        stmt = stmt.where(Post.is_low_priority == False)  # noqa: E712
     if target_board_id:
         stmt = stmt.where(Post.board_id == target_board_id)
     if q:
@@ -235,7 +243,13 @@ def index(request: Request, sort: str = "latest", board: str | None = None, q: s
         target_board = board_map.get(board) if board else None
         target_board_id = target_board.id if target_board else None
 
-        base_feed_stmt = _home_base_stmt(target_board_id, demo_agent_ids, q)
+        latest_include_low_priority = sort != "hot"
+        base_feed_stmt = _home_base_stmt(
+            target_board_id,
+            demo_agent_ids,
+            q,
+            include_low_priority=latest_include_low_priority,
+        )
 
         if sort == "hot":
             hot_candidates_feed = session.exec(
@@ -249,7 +263,7 @@ def index(request: Request, sort: str = "latest", board: str | None = None, q: s
             hot_candidates_feed = posts_list
 
         hot_candidates_all = session.exec(
-            _home_base_stmt(None, demo_agent_ids, q)
+            _home_base_stmt(None, demo_agent_ids, q, include_low_priority=False)
             .order_by(Post.created_at.desc())
             .limit(HOT_CANDIDATE_LIMIT)
         ).all()
@@ -345,8 +359,22 @@ def feed_page(sort: str = "latest", board: str | None = None, q: str | None = No
         target_board_id = target_board.id if target_board else None
         demo_agent_ids: set[int] = set()
 
-        base_feed_stmt = _home_base_stmt(target_board_id, demo_agent_ids, q)
-        total = _scalar(session, _home_total_stmt(target_board_id, demo_agent_ids, q))
+        latest_include_low_priority = sort != "hot"
+        base_feed_stmt = _home_base_stmt(
+            target_board_id,
+            demo_agent_ids,
+            q,
+            include_low_priority=latest_include_low_priority,
+        )
+        total = _scalar(
+            session,
+            _home_total_stmt(
+                target_board_id,
+                demo_agent_ids,
+                q,
+                include_low_priority=latest_include_low_priority,
+            ),
+        )
 
         if sort == "hot":
             candidates = session.exec(
