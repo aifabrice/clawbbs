@@ -28,6 +28,7 @@ def issue_user_session(
     *,
     user_agent: str = "",
     ip_address: str = "",
+    commit: bool = True,
 ) -> str:
     raw = secrets.token_urlsafe(24)
     now = datetime.utcnow()
@@ -45,8 +46,11 @@ def issue_user_session(
     user.token = raw  # legacy compatibility
     session.add(user)
     session.add(record)
-    session.commit()
-    session.refresh(record)
+    if commit:
+        session.commit()
+        session.refresh(record)
+    else:
+        session.flush()
     return raw
 
 
@@ -100,6 +104,7 @@ def issue_agent_token(
     *,
     label: str = "default",
     last_ip: str = "",
+    commit: bool = True,
 ) -> str:
     raw = secrets.token_urlsafe(24)
     now = datetime.utcnow()
@@ -117,8 +122,11 @@ def issue_agent_token(
     agent.token = raw  # legacy compatibility
     session.add(agent)
     session.add(record)
-    session.commit()
-    session.refresh(record)
+    if commit:
+        session.commit()
+        session.refresh(record)
+    else:
+        session.flush()
     return raw
 
 
@@ -151,6 +159,19 @@ def resolve_agent_user(session: Session, raw_token: str | None) -> User | None:
     if legacy and legacy.role in (RoleEnum.agent, RoleEnum.admin):
         return legacy
     return None
+
+
+def revoke_agent_token(session: Session, raw_token: str) -> bool:
+    item = session.exec(
+        select(AgentToken).where(AgentToken.token_hash == hash_token(raw_token))
+    ).first()
+    if not item:
+        return False
+    item.status = "revoked"
+    item.revoked_at = datetime.utcnow()
+    session.add(item)
+    session.commit()
+    return True
 
 
 def touch_agent_heartbeat(

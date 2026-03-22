@@ -8,7 +8,7 @@ from ..routers.deps import get_agent_user
 from ..config import AGENT_TOKEN_HEADER, AGENT_BOOTSTRAP_TOKEN
 from ..services.scoring import compute_hot_score, compute_recommend_score
 from ..services.skills_catalog import build_install_spec, skill_slug
-from ..services.auth_runtime import issue_agent_token, touch_agent_heartbeat, upsert_agent_skill_installation
+from ..services.auth_runtime import issue_agent_token, revoke_agent_token, touch_agent_heartbeat, upsert_agent_skill_installation
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -35,6 +35,7 @@ def agent_capabilities():
             "user_bind": "/users/bind",
             "pairing_code": "/users/pairing",
             "connect_claim": "/agent/connect-claim",
+            "token_rotate": "/agent/token/rotate",
             "task_dispatch": "/tasks/skill-install/{skill_id}",
             "task_poll": "/tasks/agent",
             "task_complete": "/tasks/{task_id}/complete",
@@ -74,6 +75,63 @@ def agent_register(
     }
 
 
+def _recover_claimed_binding(session: Session, item: LobsterConnectSession) -> dict | None:
+    binding = session.exec(
+        select(UserBinding).where(UserBinding.user_id == item.user_id)
+    ).first()
+    if not binding:
+        return None
+    agent = session.get(User, binding.agent_id)
+    if not agent:
+        return None
+    if item.status != "claimed" or item.agent_id != agent.id:
+        item.agent_id = agent.id
+        item.agent_name = agent.name
+        item.status = "claimed"
+        item.claimed_at = item.claimed_at or datetime.utcnow()
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+    return {
+        "status": "claimed",
+        "recovered": True,
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "agent_token": agent.token,
+        "header": AGENT_TOKEN_HEADER,
+        "user_id": item.user_id,
+        "skill_slug": item.skill_slug,
+        "connect_code": item.connect_code,
+        "claimed_at": item.claimed_at,
+    }
+
+
+@router.post("/token/rotate")
+def rotate_agent_auth_token(
+    request: Request,
+    token: str | None = Header(default=None, alias=AGENT_TOKEN_HEADER),
+    revoke_previous: bool = True,
+    agent=Depends(get_agent_user),
+    session: Session = Depends(get_session),
+):
+    next_token = issue_agent_token(
+        session,
+        agent,
+        label="rotated",
+        last_ip=request.client.host if request.client else "",
+    )
+    if revoke_previous and token and token != next_token:
+        revoke_agent_token(session, token)
+    touch_agent_heartbeat(session, agent, status="online")
+    return {
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "agent_token": next_token,
+        "header": AGENT_TOKEN_HEADER,
+        "rotated": True,
+    }
+
+
 @router.post("/connect-claim")
 def agent_connect_claim(
     code: str,
@@ -107,11 +165,15 @@ def agent_connect_claim(
         select(UserBinding).where(UserBinding.user_id == item.user_id)
     ).first()
     if existing_binding:
+        recovered = _recover_claimed_binding(session, item)
+        if recovered:
+            return recovered
         bound_agent = session.get(User, existing_binding.agent_id)
         raise HTTPException(
             status_code=409,
             detail={
                 "message": "User already bound to a lobster",
+                "retryable": False,
                 "agent_id": bound_agent.id if bound_agent else existing_binding.agent_id,
                 "agent_name": bound_agent.name if bound_agent else None,
             },
@@ -120,13 +182,13 @@ def agent_connect_claim(
     final_name = (agent_name or f"lobster-{code[-6:]}").strip()[:64]
     user = User(name=final_name, role=RoleEnum.agent)
     session.add(user)
-    session.commit()
-    session.refresh(user)
+    session.flush()
     token = issue_agent_token(
         session,
         user,
         label="connect-claim",
         last_ip=request.client.host if request.client else "",
+        commit=False,
     )
 
     binding = UserBinding(user_id=item.user_id, agent_id=user.id)
@@ -139,26 +201,33 @@ def agent_connect_claim(
     session.commit()
     session.refresh(item)
 
+    warnings: list[str] = []
     connector_skill = session.exec(
         select(Skill).where(Skill.name == item.skill_slug)
     ).first()
     if connector_skill and connector_skill.id is not None:
-        upsert_agent_skill_installation(
-            session,
-            agent_id=user.id,
-            skill_id=connector_skill.id,
-            status="installed",
-            installed_version="v0.1.0",
-            install_source="connect-claim",
-            last_result="connector claimed and ready",
-        )
+        try:
+            upsert_agent_skill_installation(
+                session,
+                agent_id=user.id,
+                skill_id=connector_skill.id,
+                status="installed",
+                installed_version="v0.1.0",
+                install_source="connect-claim",
+                last_result="connector claimed and ready",
+            )
+        except Exception:
+            warnings.append("skill_installation_state_not_updated")
 
-    touch_agent_heartbeat(
-        session,
-        user,
-        status="online",
-        capabilities={"connector": item.skill_slug, "connect_claim": True},
-    )
+    try:
+        touch_agent_heartbeat(
+            session,
+            user,
+            status="online",
+            capabilities={"connector": item.skill_slug, "connect_claim": True},
+        )
+    except Exception:
+        warnings.append("heartbeat_not_updated")
 
     return {
         "status": "claimed",
@@ -170,6 +239,7 @@ def agent_connect_claim(
         "skill_slug": item.skill_slug,
         "connect_code": item.connect_code,
         "claimed_at": item.claimed_at,
+        "warnings": warnings,
     }
 
 

@@ -3,12 +3,21 @@ import hashlib
 import hmac
 import secrets
 import urllib.parse
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlmodel import Session, select
 from ..db import get_session
 from ..models import User, RoleEnum, PairingCode, UserBinding, UserCredential, LobsterConnectSession, UserFollow
 from ..routers.deps import get_human_user, get_agent_user
-from ..config import USER_TOKEN_HEADER, PAIRING_CODE_TTL_MINUTES, CONNECT_CODE_TTL_MINUTES, PUBLIC_BASE_URL
+from ..config import (
+    USER_TOKEN_HEADER,
+    USER_SESSION_COOKIE_NAME,
+    USER_SESSION_COOKIE_SECURE,
+    USER_SESSION_COOKIE_SAMESITE,
+    USER_SESSION_TTL_HOURS,
+    PAIRING_CODE_TTL_MINUTES,
+    CONNECT_CODE_TTL_MINUTES,
+    PUBLIC_BASE_URL,
+)
 from ..services.auth_runtime import issue_user_session, revoke_user_session, touch_agent_heartbeat
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -71,6 +80,27 @@ def _connect_session_to_dict(item: LobsterConnectSession) -> dict:
     }
 
 
+def _set_user_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=USER_SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=USER_SESSION_COOKIE_SECURE,
+        samesite=USER_SESSION_COOKIE_SAMESITE,
+        max_age=USER_SESSION_TTL_HOURS * 3600,
+        path="/",
+    )
+
+
+def _clear_user_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=USER_SESSION_COOKIE_NAME,
+        path="/",
+        secure=USER_SESSION_COOKIE_SECURE,
+        samesite=USER_SESSION_COOKIE_SAMESITE,
+    )
+
+
 def _hash_password(password: str) -> str:
     salt = secrets.token_hex(8)
     iterations = 120000
@@ -99,6 +129,7 @@ def register_user(
     name: str,
     password: str,
     request: Request,
+    response: Response,
     session: Session = Depends(get_session),
 ):
     if not password:
@@ -123,11 +154,13 @@ def register_user(
             user_agent=request.headers.get("user-agent", ""),
             ip_address=request.client.host if request.client else "",
         )
+        _set_user_session_cookie(response, token)
         return {
             "id": existing.id,
             "name": existing.name,
             "token": token,
             "header": USER_TOKEN_HEADER,
+            "auth_mode": "header+cookie",
             "note": "password_set",
         }
 
@@ -144,11 +177,13 @@ def register_user(
         user_agent=request.headers.get("user-agent", ""),
         ip_address=request.client.host if request.client else "",
     )
+    _set_user_session_cookie(response, token)
     return {
         "id": user.id,
         "name": user.name,
         "token": token,
         "header": USER_TOKEN_HEADER,
+        "auth_mode": "header+cookie",
         "note": "created",
     }
 
@@ -158,6 +193,7 @@ def login_user(
     name: str,
     password: str,
     request: Request,
+    response: Response,
     session: Session = Depends(get_session),
 ):
     user = session.exec(
@@ -176,24 +212,29 @@ def login_user(
         user_agent=request.headers.get("user-agent", ""),
         ip_address=request.client.host if request.client else "",
     )
+    _set_user_session_cookie(response, token)
     return {
         "id": user.id,
         "name": user.name,
         "token": token,
         "header": USER_TOKEN_HEADER,
+        "auth_mode": "header+cookie",
         "note": "login",
     }
 
 
 @router.post("/logout")
 def logout_user(
+    request: Request,
+    response: Response,
     token: str | None = Header(default=None, alias=USER_TOKEN_HEADER),
     user=Depends(get_human_user),
     session: Session = Depends(get_session),
 ):
-    raw = token or user.token
+    raw = token or request.cookies.get(USER_SESSION_COOKIE_NAME) or user.token
     if raw:
         revoke_user_session(session, raw)
+    _clear_user_session_cookie(response)
     return {"ok": True, "user_id": user.id}
 
 
