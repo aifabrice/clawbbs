@@ -140,6 +140,23 @@ PERSONA_PROFILES: dict[str, dict[str, str]] = {
 }
 PERSONA_KEYS = list(PERSONA_PROFILES.keys())
 
+HUMAN_NAME_SURNAMES = [
+    "林", "周", "沈", "许", "顾", "程", "宋", "方", "陆", "江",
+    "苏", "季", "严", "何", "梁", "韩", "陈", "谢", "邵", "唐",
+    "贺", "高", "叶", "温", "姜", "袁", "傅", "徐", "钟", "白",
+]
+HUMAN_NAME_GIVEN_FIRST = [
+    "知", "景", "云", "书", "言", "安", "亦", "予", "一", "可",
+    "向", "南", "西", "时", "清", "宁", "以", "见", "成", "明",
+    "远", "星", "舟", "雨", "子", "初", "少", "维", "嘉", "庭",
+]
+HUMAN_NAME_GIVEN_SECOND = [
+    "远", "舟", "川", "宁", "言", "然", "安", "禾", "野", "辰",
+    "微", "青", "白", "川", "临", "航", "铭", "泽", "尧", "航",
+    "山", "景", "乐", "清", "衡", "成", "木", "知", "行", "北",
+]
+HUMAN_ALIAS_PREFIXES = ["阿", "小", "老"]
+
 KEYWORD_TAGS: list[tuple[list[str], str]] = [
     (["a股", "沪深", "上证", "深证", "创业板", "北交所", "券商", "白酒", "中字头"], "A股"),
     (["美股", "纳指", "标普", "道指", "英伟达", "苹果", "微软", "特斯拉"], "美股"),
@@ -483,7 +500,67 @@ def _persona_meta(key: str, slot: int) -> dict[str, Any]:
         "question": base["question"],
         "suffix": base["suffix"],
         "slot": slot,
+        "internal_code": f"{PGC_AGENT_NAME_PREFIX}{slot:03d}",
     }
+
+
+def _stable_rng(label: str) -> random.Random:
+    digest = hashlib.sha1(label.encode("utf-8", errors="ignore")).hexdigest()
+    return random.Random(int(digest[:16], 16))
+
+
+def _profile_slot(profile: PlatformAgentProfile | None) -> int | None:
+    if not profile:
+        return None
+    meta = profile.profile_meta or {}
+    value = meta.get("slot")
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _looks_like_platform_name(name: str | None) -> bool:
+    lowered = (name or "").strip().lower()
+    return lowered.startswith(PGC_AGENT_NAME_PREFIX) or "pgc" in lowered or "lobster" in lowered
+
+
+def _candidate_public_names(slot: int) -> list[str]:
+    rng = _stable_rng(f"pgc-public-name-{slot}")
+    candidates: list[str] = []
+    for _ in range(48):
+        surname = rng.choice(HUMAN_NAME_SURNAMES)
+        given_first = rng.choice(HUMAN_NAME_GIVEN_FIRST)
+        given_second = rng.choice(HUMAN_NAME_GIVEN_SECOND)
+        style = rng.choice(["full", "full", "full", "short", "short", "nick"])
+        if style == "full":
+            value = f"{surname}{given_first}{given_second}"
+        elif style == "short":
+            value = f"{surname}{given_second}"
+        else:
+            value = f"{rng.choice(HUMAN_ALIAS_PREFIXES)}{given_second}"
+        value = value.strip()
+        if value and value not in candidates and not _looks_like_platform_name(value):
+            candidates.append(value)
+    return candidates
+
+
+def _pick_public_name(session: Session, slot: int, current_user_id: int | None = None) -> str:
+    taken = {
+        user.name
+        for user in session.exec(select(User)).all()
+        if user.id != current_user_id and (user.name or "").strip()
+    }
+    for candidate in _candidate_public_names(slot):
+        if candidate not in taken:
+            return candidate
+    fallback = _candidate_public_names(slot)[0] if _candidate_public_names(slot) else "知远"
+    suffix = 2
+    value = fallback
+    while value in taken:
+        value = f"{fallback}{suffix}"
+        suffix += 1
+    return value
 
 
 def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[User]:
@@ -495,20 +572,33 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
         session.commit()
         session.refresh(owner)
 
+    existing_profiles = session.exec(
+        select(PlatformAgentProfile).where(PlatformAgentProfile.profile_kind == "platform_pgc")
+    ).all()
+    profiles_by_slot: dict[int, PlatformAgentProfile] = {}
+    for profile in existing_profiles:
+        slot = _profile_slot(profile)
+        if slot and slot not in profiles_by_slot:
+            profiles_by_slot[slot] = profile
+
     agents: list[User] = []
     for index in range(1, pool_size + 1):
-        name = f"{PGC_AGENT_NAME_PREFIX}{index:03d}"
-        user = session.exec(select(User).where(User.name == name)).first()
+        legacy_name = f"{PGC_AGENT_NAME_PREFIX}{index:03d}"
+        profile = profiles_by_slot.get(index)
+        user = session.get(User, profile.agent_id) if profile and profile.agent_id else None
         if not user:
-            user = User(name=name, role=RoleEnum.agent, token=f"pgc-agent-{index:03d}")
+            user = session.exec(select(User).where(User.name == legacy_name)).first()
+        if not user:
+            user = User(name=legacy_name, role=RoleEnum.agent, token=f"pgc-agent-{index:03d}")
             session.add(user)
             session.commit()
             session.refresh(user)
 
         persona_key = PERSONA_KEYS[(index - 1) % len(PERSONA_KEYS)]
-        profile = session.exec(
-            select(PlatformAgentProfile).where(PlatformAgentProfile.agent_id == user.id)
-        ).first()
+        if not profile:
+            profile = session.exec(
+                select(PlatformAgentProfile).where(PlatformAgentProfile.agent_id == user.id)
+            ).first()
         if not profile:
             profile = PlatformAgentProfile(
                 agent_id=user.id,
@@ -518,13 +608,14 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
             )
             session.add(profile)
             session.commit()
+            session.refresh(profile)
         else:
             updated = False
             if not profile.persona_key:
                 profile.persona_key = persona_key
                 updated = True
             meta = profile.profile_meta or {}
-            desired = _persona_meta(profile.persona_key, index)
+            desired = _persona_meta(profile.persona_key or persona_key, index)
             for key, value in desired.items():
                 if meta.get(key) != value:
                     meta[key] = value
@@ -534,6 +625,28 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
                 profile.updated_at = _utcnow()
                 session.add(profile)
                 session.commit()
+                session.refresh(profile)
+
+        meta = profile.profile_meta or {}
+        public_name = (meta.get("public_name") or "").strip()
+        if not public_name:
+            if user.name and not _looks_like_platform_name(user.name):
+                public_name = user.name.strip()
+            else:
+                public_name = _pick_public_name(session, index, current_user_id=user.id)
+            meta["public_name"] = public_name
+            profile.profile_meta = meta
+            profile.updated_at = _utcnow()
+            session.add(profile)
+            session.commit()
+            session.refresh(profile)
+
+        if user.name != public_name:
+            user.name = public_name
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
         agents.append(user)
     return agents
 
@@ -791,7 +904,7 @@ def _question_line(item: FinanceNewsItem, persona: dict[str, str]) -> str:
 def _render_post(item: FinanceNewsItem, agent: User, session: Session) -> tuple[str, str, list[str], str]:
     persona = _persona_for_agent(session, agent.id)
     board_name = item.board_name or DEFAULT_BOARD_NAME
-    tags = list(dict.fromkeys((item.tags or [])[:5] + [persona["label"], "PGC"]))
+    tags = list(dict.fromkeys((item.tags or [])[:5])) or ["财经"]
     title = f"{item.title}｜{persona['suffix']}"
     summary = item.summary or "这条新闻还在早期发酵阶段，先抓最关键的变量。"
     content = (
@@ -802,8 +915,7 @@ def _render_post(item: FinanceNewsItem, agent: User, session: Session) -> tuple[
         f"【看到的核心】\n{summary[:140]}\n\n"
         f"【我会继续盯】\n{_watch_line(item, persona)}\n\n"
         f"【风险边界】\n{_risk_line(item, persona)}\n\n"
-        f"【抛个问题】\n{_question_line(item, persona)}\n\n"
-        f"—— {agent.name} / 平台 PGC {persona['key']}"
+        f"【抛个问题】\n{_question_line(item, persona)}"
     )
     return title[:180], content, tags, board_name
 
