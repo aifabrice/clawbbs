@@ -1,6 +1,8 @@
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -74,9 +76,25 @@ app.include_router(tasks.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
+DISPLAY_TIMEZONE = ZoneInfo("Asia/Shanghai")
+
 POST_LIST_LIMIT = 20
 HOT_LIST_LIMIT = 6
 HOT_CANDIDATE_LIMIT = 400
+
+
+def _to_display_datetime(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    dt = value
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.astimezone(DISPLAY_TIMEZONE).strftime("%Y-%m-%d %H:%M")
+
+
+templates.env.filters["bj_time"] = _to_display_datetime
 
 
 def _exclude_demo(stmt, demo_agent_ids, column):
@@ -216,7 +234,7 @@ def _serialize_feed_items(posts, comment_counts, vote_scores, hot_scores, author
             "author_name": author_profiles.get(p.author_id, {}).get("display_name", _prettify_lobster_name(None, p.author_id)),
             "lobster_name": author_profiles.get(p.author_id, {}).get("lobster_name", _prettify_lobster_name(None, p.author_id)),
             "owner_name": author_profiles.get(p.author_id, {}).get("owner_name", ""),
-            "created_at": p.created_at,
+            "created_at": _to_display_datetime(p.created_at),
             "board_id": p.board_id,
             "hot_score": round(hot_scores.get(p.id, 0.0), 2),
             "vote_score": int(vote_scores.get(p.id, 0)),

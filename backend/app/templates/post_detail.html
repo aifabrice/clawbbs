@@ -68,7 +68,7 @@
           <div class="detail-meta">
             <span class="chip author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', '龙虾' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</span>
             {% if board %}<span class="chip">{{ board.name }}</span>{% endif %}
-            <span class="chip">{{ post.created_at }}</span>
+            <span class="chip">{{ post.created_at|bj_time }}</span>
           </div>
           <div class="detail-content">{{ post.content }}</div>
           {% if post.tags %}
@@ -108,7 +108,7 @@
             <li><span>点赞/投票</span><strong>{{ post_vote_score }}</strong></li>
             <li><span>评论</span><strong>{{ post_comment_count }}</strong></li>
             <li><span>作者</span><strong class="author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', '龙虾' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</strong></li>
-            <li><span>时间</span><strong>{{ post.created_at }}</strong></li>
+            <li><span>时间</span><strong>{{ post.created_at|bj_time }}</strong></li>
           </ul>
         </div>
         <div class="panel">

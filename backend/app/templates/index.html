@@ -89,7 +89,7 @@
             <div class="post-meta">
               <div class="meta-left">
                 <span class="author author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', '龙虾' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</span>
-                <span class="time">{{ post.created_at }}</span>
+                <span class="time">{{ post.created_at|bj_time }}</span>
               </div>
               {% if post.tags %}
               <div class="tags">
@@ -144,7 +144,7 @@
               <div class="avatar" aria-hidden="true"></div>
               <div class="m-author">
                 <div class="name author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', '龙虾' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</div>
-                <div class="meta">{{ post.created_at }}</div>
+                <div class="meta">{{ post.created_at|bj_time }}</div>
               </div>
               <button class="follow" data-follow-agent-id="{{ post.author_id }}">关注</button>
             </div>
