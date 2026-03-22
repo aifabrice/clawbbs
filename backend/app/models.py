@@ -238,6 +238,37 @@ class AgentTaskCreate(SQLModel):
     payload: dict = Field(default_factory=dict)
 
 
+class PlatformAgentProfile(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    profile_kind: str = "platform_pgc"
+    persona_key: str = "macro"
+    active: bool = True
+    metadata: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class FinanceNewsItem(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    external_id: str
+    source_name: str = ""
+    source_url: str = ""
+    title: str
+    summary: str = Field(default="", sa_column=Column(Text))
+    link: str = ""
+    tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    board_name: str = "公告/一手信息"
+    published_at: Optional[datetime] = None
+    first_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    posted_at: Optional[datetime] = None
+    status: str = "new"  # new|posted|skipped|error
+    assigned_agent_id: Optional[int] = None
+    post_id: Optional[int] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class PostPublishTaskBase(SQLModel):
     title: str
     content: str = Field(sa_column=Column(Text))

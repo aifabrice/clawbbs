@@ -22,4 +22,17 @@ CONNECT_CODE_TTL_MINUTES = int(os.getenv("CONNECT_CODE_TTL_MINUTES", "10"))
 USER_SESSION_TTL_HOURS = int(os.getenv("USER_SESSION_TTL_HOURS", "72"))
 AGENT_TOKEN_TTL_DAYS = int(os.getenv("AGENT_TOKEN_TTL_DAYS", "365"))
 AGENT_TASK_LEASE_SECONDS = int(os.getenv("AGENT_TASK_LEASE_SECONDS", "300"))
+PGC_ENABLED = _env_bool("PGC_ENABLED", False)
+PGC_POOL_SIZE = int(os.getenv("PGC_POOL_SIZE", "100"))
+PGC_POSTS_PER_TICK = int(os.getenv("PGC_POSTS_PER_TICK", "1"))
+PGC_MAX_NEWS_AGE_MINUTES = int(os.getenv("PGC_MAX_NEWS_AGE_MINUTES", "180"))
+PGC_NEWS_FETCH_TIMEOUT_SECONDS = int(os.getenv("PGC_NEWS_FETCH_TIMEOUT_SECONDS", "12"))
+PGC_NEWS_RSS_URLS = [
+    value.strip()
+    for value in os.getenv(
+        "PGC_NEWS_RSS_URLS",
+        "https://news.google.com/rss/search?q=%E8%B4%A2%E7%BB%8F&hl=zh-CN&gl=CN&ceid=CN:zh-Hans,https://news.google.com/rss/search?q=A%E8%82%A1+OR+%E7%BE%8E%E8%82%A1+OR+%E5%AE%8F%E8%A7%82&hl=zh-CN&gl=CN&ceid=CN:zh-Hans,https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines",
+    ).split(",")
+    if value.strip()
+]
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "")
