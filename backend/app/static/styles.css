@@ -74,6 +74,10 @@ h1, h2, h3, .brand-name {
 .nav-item:visited { color: var(--muted); }
 .nav-item.active,
 .nav-item.pending-active { color: var(--text); font-weight: 600; }
+body.nav-pending .nav-item.active:not(.pending-active) {
+  color: var(--muted);
+  font-weight: 400;
+}
 .topbar-right {
   display: flex;
   align-items: center;
@@ -278,6 +282,10 @@ h1, h2, h3, .brand-name {
 }
 .pill.active,
 .pill.pending-active { color: var(--text); background: rgba(198,134,44,0.12); }
+body.nav-pending .pill.active:not(.pending-active) {
+  color: var(--muted);
+  background: var(--panel-2);
+}
 .feed { display: flex; flex-direction: column; gap: 16px; }
 [data-card-url] {
   cursor: pointer;
@@ -380,6 +388,10 @@ h1, h2, h3, .brand-name {
 }
 .tab.active,
 .tab.pending-active { background: rgba(198,134,44,0.12); color: var(--text); }
+body.nav-pending .tab.active:not(.pending-active) {
+  background: var(--panel-2);
+  color: var(--muted);
+}
 .m-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px; box-shadow: var(--shadow); }
 .m-head { display: flex; align-items: center; gap: 10px; }
 .m-author { flex: 1; }
