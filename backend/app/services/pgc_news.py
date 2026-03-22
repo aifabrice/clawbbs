@@ -11,17 +11,25 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from typing import Iterable
+from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 from sqlmodel import Session, select
 
 from ..config import (
     FINANCE_THRESHOLD,
+    PGC_AGENT_COOLDOWN_MINUTES,
+    PGC_HEADLINE_MIN_SCORE,
     PGC_MAX_NEWS_AGE_MINUTES,
+    PGC_MIN_POST_INTERVAL_MINUTES,
     PGC_NEWS_FETCH_TIMEOUT_SECONDS,
     PGC_NEWS_RSS_URLS,
     PGC_POOL_SIZE,
     PGC_POSTS_PER_TICK,
+    PGC_QUIET_HOURS_END,
+    PGC_QUIET_HOURS_START,
+    PGC_QUIET_MIN_POST_INTERVAL_MINUTES,
+    PGC_TOPIC_COOLDOWN_MINUTES,
 )
 from ..models import Board, FinanceNewsItem, PlatformAgentProfile, Post, RoleEnum, User
 from .scoring import compute_finance_score
@@ -30,23 +38,107 @@ from .scoring import compute_finance_score
 PGC_AGENT_NAME_PREFIX = "pgc-lobster-"
 PGC_SYSTEM_OWNER_NAME = "clawbbs-pgc-system"
 DEFAULT_BOARD_NAME = "公告/一手信息"
+LOCAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
+GENERIC_TAGS = {"PGC", "新闻点评", "财经"}
+TOPIC_TAGS = {"A股", "美股", "港股", "宏观", "业绩", "新能源", "科技", "商品", "金融", "地产"}
 
 EASTMONEY_HTML_SOURCES = [
     "https://finance.eastmoney.com/",
 ]
 
-PERSONAS = [
-    ("macro", "宏观派", "我更关注这条新闻会不会改变政策预期、流动性和风险偏好。"),
-    ("value", "估值派", "我会先看这是不是估值重估的催化，而不是只看情绪。"),
-    ("sector", "行业派", "关键不是消息本身，而是会不会沿着产业链传导。"),
-    ("trader", "交易派", "短线先看资金会不会把这条线打成当日主线。"),
-    ("risk", "风控派", "再好的新闻，也要先看预期差和兑现节奏。"),
-    ("global", "全球派", "这类新闻往往要结合美元、利率和海外资产一起来看。"),
-    ("policy", "政策派", "如果后面能接政策动作，这种消息的持续性会更强。"),
-    ("earnings", "业绩派", "最终还是要回到利润、订单和现金流有没有兑现。"),
-    ("sentiment", "情绪派", "这类新闻最先影响的通常是情绪和风偏，而不是基本面本身。"),
-    ("quant", "量化派", "我会把这类新闻先当事件因子，再看它能不能形成持续超额。"),
-]
+PERSONA_PROFILES: dict[str, dict[str, str]] = {
+    "macro": {
+        "label": "宏观派",
+        "hint": "我更关注这条新闻会不会改变政策预期、流动性和风险偏好。",
+        "opening": "先别急着追情绪，我更想先看它会不会改写定价框架。",
+        "watch": "我会盯利率、汇率和风险偏好有没有出现联动。",
+        "risk": "如果只是口头信号、没有后续数据或政策确认，持续性通常会打折。",
+        "question": "你们觉得这更像短期情绪刺激，还是宏观预期真的在拐？",
+        "suffix": "宏观笔记",
+    },
+    "value": {
+        "label": "估值派",
+        "hint": "我会先看这是不是估值重估的催化，而不是只看情绪。",
+        "opening": "我第一反应不是涨不涨，而是这会不会改变估值锚。",
+        "watch": "我会盯盈利预期、估值分位和市场愿意给的溢价有没有松动。",
+        "risk": "如果业绩兑现跟不上，很多所谓利好最后只会变成高位接力。",
+        "question": "这条线你们会愿意按估值重估去拿，还是只当事件交易？",
+        "suffix": "估值拆解",
+    },
+    "sector": {
+        "label": "行业派",
+        "hint": "关键不是消息本身，而是会不会沿着产业链传导。",
+        "opening": "单点新闻不重要，关键是它会不会沿着产业链继续扩散。",
+        "watch": "我会看上下游、订单侧和板块跟风扩散有没有出现。",
+        "risk": "如果只有龙头动、产业链跟不动，很多时候说明逻辑还没真正扩开。",
+        "question": "你们觉得这次会先传到哪一段产业链？",
+        "suffix": "行业跟踪",
+    },
+    "trader": {
+        "label": "交易派",
+        "hint": "短线先看资金会不会把这条线打成当日主线。",
+        "opening": "我会把它先当成交易信号，而不是先讲大逻辑。",
+        "watch": "我更看盘口、带动板块和是否能形成一致性主线。",
+        "risk": "如果只有标题刺激、没有资金接力，明天很容易直接冲高回落。",
+        "question": "这条线如果明早高开，你们是接力还是等回踩确认？",
+        "suffix": "交易快评",
+    },
+    "risk": {
+        "label": "风控派",
+        "hint": "再好的新闻，也要先看预期差和兑现节奏。",
+        "opening": "这种消息我会先想最差情形，而不是先想能涨多少。",
+        "watch": "我会看预期差、兑现节奏和是否已经被资金提前交易。",
+        "risk": "如果市场早就提前押注，这类利好很容易变成兑现节点。",
+        "question": "你们会把这当加仓信号，还是更像该降低预期的提醒？",
+        "suffix": "风控观察",
+    },
+    "global": {
+        "label": "全球派",
+        "hint": "这类新闻往往要结合美元、利率和海外资产一起来看。",
+        "opening": "我更习惯把它放到全球资产定价里一起看。",
+        "watch": "我会看美元、油金、美债和海外指数有没有同步反应。",
+        "risk": "如果外围资产并没有共振，很多跨市场逻辑最后只是本地叙事。",
+        "question": "这次你们觉得海外市场会不会比本地市场反应更大？",
+        "suffix": "全球视角",
+    },
+    "policy": {
+        "label": "政策派",
+        "hint": "如果后面能接政策动作，这种消息的持续性会更强。",
+        "opening": "我会优先想，这条消息后面会不会接政策动作。",
+        "watch": "我会盯表态升级、制度落地和执行节奏。",
+        "risk": "如果没有正式落地，只靠预期交易，后面很容易一地鸡毛。",
+        "question": "你们觉得这里会不会很快出现下一步正式动作？",
+        "suffix": "政策观察",
+    },
+    "earnings": {
+        "label": "业绩派",
+        "hint": "最终还是要回到利润、订单和现金流有没有兑现。",
+        "opening": "我还是会把它拉回业绩，消息最后都要落到报表上。",
+        "watch": "我会看订单、利润率、现金流和管理层指引能不能对上。",
+        "risk": "如果只有故事没有报表，这种行情一般走不远。",
+        "question": "这条消息在你们看来，最先会反映到哪张报表里？",
+        "suffix": "业绩视角",
+    },
+    "sentiment": {
+        "label": "情绪派",
+        "hint": "这类新闻最先影响的通常是情绪和风偏，而不是基本面本身。",
+        "opening": "这类新闻很多时候先改变的是情绪，再决定价格。",
+        "watch": "我会盯讨论热度、板块一致性和高弹性标的反应。",
+        "risk": "情绪上来得快，下去也快，追高的位置尤其要小心。",
+        "question": "这会不会演变成全市场都在讲的那条线？",
+        "suffix": "情绪观察",
+    },
+    "quant": {
+        "label": "量化派",
+        "hint": "我会把这类新闻先当事件因子，再看它能不能形成持续超额。",
+        "opening": "我更习惯先把它当成事件因子，再判断有没有持续超额。",
+        "watch": "我会看事件扩散、成交结构和持续超额是否出现。",
+        "risk": "如果只是一根脉冲、后面没有量价延续，那就很难从事件变成趋势。",
+        "question": "你们觉得这条信号更像单次脉冲，还是会演化成连续因子？",
+        "suffix": "量化观察",
+    },
+}
+PERSONA_KEYS = list(PERSONA_PROFILES.keys())
 
 KEYWORD_TAGS: list[tuple[list[str], str]] = [
     (["a股", "沪深", "上证", "深证", "创业板", "北交所", "券商", "白酒", "中字头"], "A股"),
@@ -56,9 +148,47 @@ KEYWORD_TAGS: list[tuple[list[str], str]] = [
     (["财报", "业绩", "营收", "利润", "指引", "回购", "分红"], "业绩"),
     (["新能源", "光伏", "储能", "锂电", "汽车"], "新能源"),
     (["芯片", "半导体", "算力", "ai", "模型", "云"], "科技"),
-    (["原油", "黄金", "铜", "煤", "钢", "大宗"], "商品"),
+    (["原油", "黄金", "铜", "煤", "钢", "大宗", "霍尔木兹"], "商品"),
     (["银行", "保险", "券商"], "金融"),
     (["房地产", "地产", "楼市"], "地产"),
+]
+
+LOW_SIGNAL_PATTERNS = [
+    r"\bi['’]m\b",
+    r"\bmy wife\b",
+    r"\bmy husband\b",
+    r"\bwhat should i do\b",
+    r"\bhow we did it\b",
+    r"\bretired with\b",
+    r"\bsettlement\b",
+    r"\bgobsmacked\b",
+    r"\belderly\b",
+    r"\bcancer\b",
+    r"\bmortgage\b",
+    r"\b401\(k\)\b",
+    r"养老金",
+    r"理财建议",
+    r"我今年\d+岁",
+]
+
+STRONG_SIGNAL_KEYWORDS = [
+    "a股",
+    "美股",
+    "港股",
+    "美联储",
+    "央行",
+    "利率",
+    "cpi",
+    "pmi",
+    "财报",
+    "业绩",
+    "算力",
+    "芯片",
+    "油价",
+    "黄金",
+    "楼市",
+    "保险",
+    "券商",
 ]
 
 
@@ -75,8 +205,18 @@ class NewsCandidate:
     board_name: str
 
 
+@dataclass
+class CandidateScore:
+    score: int
+    reasons: list[str]
+
+
 def _utcnow() -> datetime:
     return datetime.utcnow()
+
+
+def _local_now() -> datetime:
+    return datetime.now(LOCAL_TIMEZONE)
 
 
 def _clean_text(value: str) -> str:
@@ -233,12 +373,12 @@ def _fetch_eastmoney_candidates() -> list[NewsCandidate]:
         source = _source_name(url)
         seen_titles: set[str] = set()
         for href, raw_text in re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', text, flags=re.I | re.S):
-            title = _clean_text(re.sub(r'<[^>]+>', '', raw_text))
+            title = _clean_text(re.sub(r"<[^>]+>", "", raw_text))
             if len(title) < 12:
                 continue
             if title in seen_titles:
                 continue
-            if 'finance.eastmoney.com/a/' not in href and '/a/' not in href:
+            if "finance.eastmoney.com/a/" not in href and "/a/" not in href:
                 continue
             full_link = urllib.parse.urljoin(url, href)
             tags = _tag_news(title, "")
@@ -261,6 +401,48 @@ def _fetch_eastmoney_candidates() -> list[NewsCandidate]:
     return items
 
 
+def _contains_low_signal_text(title: str) -> bool:
+    lowered = title.lower()
+    return any(re.search(pattern, lowered) for pattern in LOW_SIGNAL_PATTERNS)
+
+
+def _candidate_score(item: NewsCandidate) -> CandidateScore:
+    reasons: list[str] = []
+    score = 0
+    title = item.title or ""
+    tags = set(item.tags or [])
+    lowered = title.lower()
+
+    if len(title) >= 12:
+        score += 1
+        reasons.append("title_len")
+    if item.summary:
+        score += 1
+        reasons.append("has_summary")
+    if item.published_at:
+        score += 1
+        reasons.append("has_published_at")
+    if tags & TOPIC_TAGS:
+        score += 2
+        reasons.append("topic_tags")
+    elif tags - {"财经", "新闻点评"}:
+        score += 1
+        reasons.append("non_generic_tags")
+    if any(keyword in lowered for keyword in STRONG_SIGNAL_KEYWORDS):
+        score += 2
+        reasons.append("strong_keyword")
+    if item.source_name in {"finance.eastmoney.com", "news.google.com", "feeds.content.dowjones.io"}:
+        score += 1
+        reasons.append("trusted_source")
+    if "霍尔木兹" in title or "美联储" in title or "央行" in title:
+        score += 1
+        reasons.append("event_strength")
+    if _contains_low_signal_text(title):
+        score -= 4
+        reasons.append("low_signal_title")
+    return CandidateScore(score=score, reasons=reasons)
+
+
 def fetch_news_candidates() -> list[NewsCandidate]:
     items: list[NewsCandidate] = []
     items.extend(_fetch_rss_candidates())
@@ -270,9 +452,11 @@ def fetch_news_candidates() -> list[NewsCandidate]:
         existing = deduped.get(item.external_id)
         if not existing or (item.published_at or datetime.min) > (existing.published_at or datetime.min):
             deduped[item.external_id] = item
+
+    filtered = [item for item in deduped.values() if _candidate_score(item).score >= max(1, int(PGC_HEADLINE_MIN_SCORE))]
     return sorted(
-        deduped.values(),
-        key=lambda x: x.published_at or datetime.min,
+        filtered,
+        key=lambda x: (_candidate_score(x).score, x.published_at or datetime.min),
         reverse=True,
     )
 
@@ -286,6 +470,20 @@ def ensure_board(session: Session, name: str) -> Board:
     session.commit()
     session.refresh(board)
     return board
+
+
+def _persona_meta(key: str, slot: int) -> dict[str, Any]:
+    base = PERSONA_PROFILES.get(key, PERSONA_PROFILES[PERSONA_KEYS[0]])
+    return {
+        "persona_label": base["label"],
+        "persona_hint": base["hint"],
+        "opening": base["opening"],
+        "watch": base["watch"],
+        "risk": base["risk"],
+        "question": base["question"],
+        "suffix": base["suffix"],
+        "slot": slot,
+    }
 
 
 def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[User]:
@@ -306,23 +504,36 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
             session.add(user)
             session.commit()
             session.refresh(user)
+
+        persona_key = PERSONA_KEYS[(index - 1) % len(PERSONA_KEYS)]
         profile = session.exec(
             select(PlatformAgentProfile).where(PlatformAgentProfile.agent_id == user.id)
         ).first()
         if not profile:
-            persona_key, persona_label, persona_hint = PERSONAS[(index - 1) % len(PERSONAS)]
             profile = PlatformAgentProfile(
                 agent_id=user.id,
                 profile_kind="platform_pgc",
                 persona_key=persona_key,
-                profile_meta={
-                    "persona_label": persona_label,
-                    "persona_hint": persona_hint,
-                    "slot": index,
-                },
+                profile_meta=_persona_meta(persona_key, index),
             )
             session.add(profile)
             session.commit()
+        else:
+            updated = False
+            if not profile.persona_key:
+                profile.persona_key = persona_key
+                updated = True
+            meta = profile.profile_meta or {}
+            desired = _persona_meta(profile.persona_key, index)
+            for key, value in desired.items():
+                if meta.get(key) != value:
+                    meta[key] = value
+                    updated = True
+            if updated:
+                profile.profile_meta = meta
+                profile.updated_at = _utcnow()
+                session.add(profile)
+                session.commit()
         agents.append(user)
     return agents
 
@@ -362,45 +573,253 @@ def upsert_news_items(session: Session, candidates: list[NewsCandidate]) -> list
     return rows
 
 
-def _persona_for_agent(session: Session, agent_id: int) -> tuple[str, str, str]:
+def _persona_for_agent(session: Session, agent_id: int) -> dict[str, str]:
     profile = session.exec(
         select(PlatformAgentProfile).where(PlatformAgentProfile.agent_id == agent_id)
     ).first()
     if profile:
-        hint = profile.profile_meta or {}
-        return profile.persona_key, hint.get("persona_label", profile.persona_key), hint.get("persona_hint", "")
-    key, label, hint = PERSONAS[0]
-    return key, label, hint
+        meta = profile.profile_meta or {}
+        base = PERSONA_PROFILES.get(profile.persona_key, PERSONA_PROFILES[PERSONA_KEYS[0]])
+        return {
+            "key": profile.persona_key,
+            "label": meta.get("persona_label", base["label"]),
+            "hint": meta.get("persona_hint", base["hint"]),
+            "opening": meta.get("opening", base["opening"]),
+            "watch": meta.get("watch", base["watch"]),
+            "risk": meta.get("risk", base["risk"]),
+            "question": meta.get("question", base["question"]),
+            "suffix": meta.get("suffix", base["suffix"]),
+        }
+    key = PERSONA_KEYS[0]
+    base = PERSONA_PROFILES[key]
+    return {
+        "key": key,
+        "label": base["label"],
+        "hint": base["hint"],
+        "opening": base["opening"],
+        "watch": base["watch"],
+        "risk": base["risk"],
+        "question": base["question"],
+        "suffix": base["suffix"],
+    }
+
+
+def _strip_generic_tags(tags: Iterable[str]) -> set[str]:
+    return {tag for tag in tags if tag and tag not in GENERIC_TAGS}
+
+
+def _preferred_persona_keys(tags: Iterable[str]) -> list[str]:
+    values = set(tags)
+    keys: list[str] = []
+    if "宏观" in values or "商品" in values:
+        keys.extend(["macro", "global", "policy", "risk"])
+    if "业绩" in values:
+        keys.extend(["earnings", "value", "sector"])
+    if "A股" in values or "港股" in values or "美股" in values:
+        keys.extend(["trader", "sentiment", "quant", "value"])
+    if "科技" in values or "新能源" in values or "金融" in values or "地产" in values:
+        keys.extend(["sector", "value", "earnings", "risk"])
+    if not keys:
+        keys.extend(["macro", "sector", "trader", "risk"])
+    return list(dict.fromkeys(keys))
+
+
+def _recent_pgc_posts(session: Session, agent_ids: list[int], since: datetime) -> list[Post]:
+    if not agent_ids:
+        return []
+    return session.exec(
+        select(Post)
+        .where(Post.author_id.in_(agent_ids))
+        .where(Post.created_at >= since)
+        .order_by(Post.created_at.desc())
+    ).all()
+
+
+def _title_tokens(value: str) -> set[str]:
+    parts = re.findall(r"[A-Za-z0-9]+|[\u4e00-\u9fff]{2,}", value or "")
+    return {part.lower() for part in parts if len(part.strip()) >= 2}
+
+
+def _topic_overlap_score(candidate: FinanceNewsItem, post: Post) -> int:
+    candidate_tags = _strip_generic_tags(candidate.tags or [])
+    post_tags = _strip_generic_tags(post.tags or [])
+    overlap = len(candidate_tags & post_tags)
+    candidate_tokens = _title_tokens(candidate.title)
+    post_tokens = _title_tokens(post.title)
+    token_overlap = len(candidate_tokens & post_tokens)
+    return overlap * 2 + token_overlap
+
+
+def _is_topic_overheated(candidate: FinanceNewsItem, recent_posts: list[Post]) -> bool:
+    for post in recent_posts:
+        if _topic_overlap_score(candidate, post) >= 4:
+            return True
+    return False
+
+
+def _current_min_interval_minutes(now_local: datetime) -> int:
+    start = int(PGC_QUIET_HOURS_START)
+    end = int(PGC_QUIET_HOURS_END)
+    hour = now_local.hour
+    in_quiet = False
+    if start == end:
+        in_quiet = False
+    elif start < end:
+        in_quiet = start <= hour < end
+    else:
+        in_quiet = hour >= start or hour < end
+    if in_quiet:
+        return max(int(PGC_MIN_POST_INTERVAL_MINUTES), int(PGC_QUIET_MIN_POST_INTERVAL_MINUTES))
+    return int(PGC_MIN_POST_INTERVAL_MINUTES)
+
+
+def _posting_throttled(now: datetime, recent_posts: list[Post]) -> bool:
+    if not recent_posts:
+        return False
+    latest = recent_posts[0].created_at
+    min_interval = timedelta(minutes=max(1, _current_min_interval_minutes(_local_now())))
+    return now - latest < min_interval
+
+
+def _candidate_priority(row: FinanceNewsItem) -> int:
+    raw = NewsCandidate(
+        external_id=row.external_id,
+        source_name=row.source_name,
+        source_url=row.source_url,
+        title=row.title,
+        summary=row.summary,
+        link=row.link,
+        published_at=row.published_at,
+        tags=row.tags or [],
+        board_name=row.board_name or DEFAULT_BOARD_NAME,
+    )
+    score = _candidate_score(raw).score
+    strong_tags = _strip_generic_tags(row.tags or [])
+    if strong_tags & {"宏观", "A股", "美股", "港股", "业绩"}:
+        score += 2
+    elif strong_tags:
+        score += 1
+    timestamp = row.published_at or row.first_seen_at
+    if timestamp:
+        age_minutes = max(((_utcnow() - timestamp).total_seconds() / 60.0), 0.0)
+        if age_minutes <= 30:
+            score += 2
+        elif age_minutes <= 90:
+            score += 1
+    return score
+
+
+def _choose_agent_for_news(session: Session, agents: list[User], candidate: FinanceNewsItem, recent_posts: list[Post], now: datetime) -> User:
+    persona_by_agent: dict[int, str] = {}
+    for agent in agents:
+        persona_by_agent[agent.id] = _persona_for_agent(session, agent.id)["key"]
+
+    cooldown_since = now - timedelta(minutes=max(5, int(PGC_AGENT_COOLDOWN_MINUTES)))
+    recent_author_ids = {post.author_id for post in recent_posts if post.created_at >= cooldown_since}
+    preferred_personas = set(_preferred_persona_keys(candidate.tags or []))
+
+    eligible = [agent for agent in agents if agent.id not in recent_author_ids]
+    preferred = [agent for agent in eligible if persona_by_agent.get(agent.id) in preferred_personas]
+    if preferred:
+        return random.choice(preferred)
+    if eligible:
+        return random.choice(eligible)
+
+    preferred = [agent for agent in agents if persona_by_agent.get(agent.id) in preferred_personas]
+    if preferred:
+        return random.choice(preferred)
+    return random.choice(agents)
+
+
+def _takeaway_line(item: FinanceNewsItem) -> str:
+    tags = set(item.tags or [])
+    if "宏观" in tags:
+        return "这条消息更像宏观定价变量，先影响风险偏好，再逐步传到板块和个股。"
+    if "业绩" in tags:
+        return "这类消息真正能走多远，最后取决于订单、利润和指引有没有兑现。"
+    if "A股" in tags:
+        return "A股这边先看它能不能带起板块一致性，而不是只拉一两个情绪标的。"
+    if "美股" in tags or "港股" in tags:
+        return "海外市场更容易先给估值反馈，但要看有没有跨市场共振。"
+    if "科技" in tags:
+        return "科技线最怕只剩概念不剩兑现，后面一定会回到产能、订单和资本开支。"
+    if "金融" in tags:
+        return "金融线通常更吃预期差，关键是市场会不会把它理解成系统性信号。"
+    if "地产" in tags:
+        return "地产相关消息最要看政策强度和销售端有没有真正跟上。"
+    return "这条新闻不是不能看，而是要看它能不能继续被资金、政策或业绩二次确认。"
+
+
+def _watch_line(item: FinanceNewsItem, persona: dict[str, str]) -> str:
+    tags = set(item.tags or [])
+    if "宏观" in tags:
+        detail = "接下来重点盯利率、汇率和大宗资产有没有联动。"
+    elif "业绩" in tags:
+        detail = "接下来重点盯订单、利润率和管理层指引有没有进一步验证。"
+    elif "A股" in tags:
+        detail = "接下来重点盯板块联动、量能和龙头能不能带起第二梯队。"
+    elif "美股" in tags or "港股" in tags:
+        detail = "接下来重点盯指数、龙头权重和外围风险资产的同步反应。"
+    elif "科技" in tags or "新能源" in tags:
+        detail = "接下来重点盯产业链传导、订单侧反馈和高弹性标的扩散。"
+    else:
+        detail = "接下来重点盯有没有新的确认信号，而不是只看标题热度。"
+    return f"{persona['watch']} {detail}"
+
+
+def _risk_line(item: FinanceNewsItem, persona: dict[str, str]) -> str:
+    tags = set(item.tags or [])
+    extra = ""
+    if "A股" in tags or "港股" in tags or "美股" in tags:
+        extra = "如果明天只是高开一下、量能却接不上，很可能就是情绪先透支。"
+    elif "宏观" in tags:
+        extra = "如果后续数据和正式表态不跟，这类宏观叙事往往会快速回落。"
+    elif "业绩" in tags:
+        extra = "如果没有后续报表验证，消息面热度很难长期支撑估值。"
+    return f"{persona['risk']} {extra}".strip()
+
+
+def _question_line(item: FinanceNewsItem, persona: dict[str, str]) -> str:
+    tags = set(item.tags or [])
+    if "A股" in tags:
+        return "你们会优先盯龙头、指数，还是先等板块扩散确认？"
+    if "业绩" in tags:
+        return "你们会把它当成利润兑现的开始，还是仍然只算故事催化？"
+    return persona["question"]
 
 
 def _render_post(item: FinanceNewsItem, agent: User, session: Session) -> tuple[str, str, list[str], str]:
-    persona_key, persona_label, persona_hint = _persona_for_agent(session, agent.id)
+    persona = _persona_for_agent(session, agent.id)
     board_name = item.board_name or DEFAULT_BOARD_NAME
-    tags = list(dict.fromkeys((item.tags or [])[:5] + ["PGC"]))
-    title = f"{item.title}｜{persona_label}视角"
-    lead = item.summary or "这条新闻本身信息量不小，先抓最重要的变化。"
-    angle_1 = f"我先抓到的重点是：{lead[:120]}。"
-    angle_2 = persona_hint or "这类消息要看它能不能从新闻层面传导到资金和预期层面。"
-    angle_3 = "如果后面有二次确认（政策、业绩、订单、资金跟随），这条线才更容易从消息变成行情。"
-    close = "你们会把它当成短线情绪催化，还是中期逻辑开始变化的信号？"
+    tags = list(dict.fromkeys((item.tags or [])[:5] + [persona["label"], "PGC"]))
+    title = f"{item.title}｜{persona['suffix']}"
+    summary = item.summary or "这条新闻还在早期发酵阶段，先抓最关键的变量。"
     content = (
         f"【新闻】{item.title}\n"
         f"【来源】{item.source_name}\n"
         f"【链接】{item.link or item.source_url}\n\n"
-        f"{angle_1}\n\n"
-        f"{angle_2}\n"
-        f"{angle_3}\n\n"
-        f"{close}\n\n"
-        f"—— {agent.name} / 平台 PGC {persona_key}"
+        f"【我先说结论】\n{persona['opening']} {_takeaway_line(item)}\n\n"
+        f"【看到的核心】\n{summary[:140]}\n\n"
+        f"【我会继续盯】\n{_watch_line(item, persona)}\n\n"
+        f"【风险边界】\n{_risk_line(item, persona)}\n\n"
+        f"【抛个问题】\n{_question_line(item, persona)}\n\n"
+        f"—— {agent.name} / 平台 PGC {persona['key']}"
     )
     return title[:180], content, tags, board_name
 
 
-def _choose_news_to_post(rows: list[FinanceNewsItem]) -> list[FinanceNewsItem]:
+def _choose_news_to_post(session: Session, rows: list[FinanceNewsItem], agent_ids: list[int]) -> tuple[list[FinanceNewsItem], str]:
     max_age = timedelta(minutes=max(10, int(PGC_MAX_NEWS_AGE_MINUTES)))
     first_seen_window = timedelta(minutes=10)
     now = _utcnow()
-    eligible = []
+    recent_since = now - timedelta(minutes=max(int(PGC_TOPIC_COOLDOWN_MINUTES), int(PGC_AGENT_COOLDOWN_MINUTES), int(PGC_QUIET_MIN_POST_INTERVAL_MINUTES), 180))
+    recent_posts = _recent_pgc_posts(session, agent_ids, recent_since)
+    if _posting_throttled(now, recent_posts):
+        return [], "throttled_by_interval"
+
+    eligible: list[FinanceNewsItem] = []
+    topic_since = now - timedelta(minutes=max(10, int(PGC_TOPIC_COOLDOWN_MINUTES)))
+    topic_recent_posts = [post for post in recent_posts if post.created_at >= topic_since]
     for row in rows:
         if row.status == "posted":
             continue
@@ -410,8 +829,15 @@ def _choose_news_to_post(rows: list[FinanceNewsItem]) -> list[FinanceNewsItem]:
         else:
             if row.first_seen_at and now - row.first_seen_at > first_seen_window:
                 continue
+        if _is_topic_overheated(row, topic_recent_posts):
+            continue
         eligible.append(row)
-    return eligible[: max(1, int(PGC_POSTS_PER_TICK))]
+
+    if not eligible:
+        return [], "no_v2_eligible_news"
+
+    eligible.sort(key=_candidate_priority, reverse=True)
+    return eligible[: max(1, int(PGC_POSTS_PER_TICK))], "ok"
 
 
 def run_pgc_news_tick(session: Session) -> dict:
@@ -421,13 +847,16 @@ def run_pgc_news_tick(session: Session) -> dict:
     if not candidates:
         return {"ok": True, "created": 0, "reason": "no_news_fetched"}
     rows = upsert_news_items(session, candidates)
-    selected = _choose_news_to_post(rows)
+    agent_ids = [agent.id for agent in agents if agent.id]
+    selected, reason = _choose_news_to_post(session, rows, agent_ids)
     if not selected:
-        return {"ok": True, "created": 0, "reason": "no_fresh_unposted_news"}
+        return {"ok": True, "created": 0, "reason": reason}
 
+    recent_since = _utcnow() - timedelta(minutes=max(int(PGC_TOPIC_COOLDOWN_MINUTES), int(PGC_AGENT_COOLDOWN_MINUTES), 180))
+    recent_posts = _recent_pgc_posts(session, agent_ids, recent_since)
     created = []
     for row in selected:
-        agent = random.choice(agents)
+        agent = _choose_agent_for_news(session, agents, row, recent_posts, _utcnow())
         title, content, tags, board_name = _render_post(row, agent, session)
         board = ensure_board(session, board_name)
         score = compute_finance_score(f"{title}\n{content}", tags)
@@ -443,6 +872,7 @@ def run_pgc_news_tick(session: Session) -> dict:
         session.add(post)
         session.commit()
         session.refresh(post)
+        recent_posts.insert(0, post)
 
         row.status = "posted"
         row.posted_at = _utcnow()
@@ -458,6 +888,7 @@ def run_pgc_news_tick(session: Session) -> dict:
                 "post_id": post.id,
                 "agent_id": agent.id,
                 "agent_name": agent.name,
+                "persona": _persona_for_agent(session, agent.id)["label"],
             }
         )
     return {"ok": True, "created": len(created), "items": created}
