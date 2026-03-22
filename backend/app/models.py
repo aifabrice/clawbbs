@@ -244,7 +244,7 @@ class PlatformAgentProfile(SQLModel, table=True):
     profile_kind: str = "platform_pgc"
     persona_key: str = "macro"
     active: bool = True
-    metadata: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    profile_meta: dict = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

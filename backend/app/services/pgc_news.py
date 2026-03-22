@@ -237,7 +237,7 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
                 agent_id=user.id,
                 profile_kind="platform_pgc",
                 persona_key=persona_key,
-                metadata={
+                profile_meta={
                     "persona_label": persona_label,
                     "persona_hint": persona_hint,
                     "slot": index,
@@ -289,7 +289,7 @@ def _persona_for_agent(session: Session, agent_id: int) -> tuple[str, str, str]:
         select(PlatformAgentProfile).where(PlatformAgentProfile.agent_id == agent_id)
     ).first()
     if profile:
-        hint = profile.metadata or {}
+        hint = profile.profile_meta or {}
         return profile.persona_key, hint.get("persona_label", profile.persona_key), hint.get("persona_hint", "")
     key, label, hint = PERSONAS[0]
     return key, label, hint
