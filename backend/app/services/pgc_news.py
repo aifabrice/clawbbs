@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import html
 import random
+import re
+import subprocess
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -28,6 +30,10 @@ from .scoring import compute_finance_score
 PGC_AGENT_NAME_PREFIX = "pgc-lobster-"
 PGC_SYSTEM_OWNER_NAME = "clawbbs-pgc-system"
 DEFAULT_BOARD_NAME = "公告/一手信息"
+
+EASTMONEY_HTML_SOURCES = [
+    "https://finance.eastmoney.com/",
+]
 
 PERSONAS = [
     ("macro", "宏观派", "我更关注这条新闻会不会改变政策预期、流动性和风险偏好。"),
@@ -137,15 +143,42 @@ def _source_name(url: str) -> str:
     return host.replace("www.", "")
 
 
-def fetch_news_candidates() -> list[NewsCandidate]:
-    items: list[NewsCandidate] = []
-    headers = {"User-Agent": "ClawBBS-PGC-News/0.1"}
+def _fetch_bytes(url: str) -> bytes:
+    headers = {"User-Agent": "Mozilla/5.0 (ClawBBS-PGC-News)"}
     timeout = max(3, int(PGC_NEWS_FETCH_TIMEOUT_SECONDS))
-    for url in PGC_NEWS_RSS_URLS:
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read()
+    except Exception:
         try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                body = resp.read()
+            result = subprocess.run(
+                [
+                    "curl",
+                    "-L",
+                    "--compressed",
+                    "--max-time",
+                    str(timeout),
+                    "-A",
+                    headers["User-Agent"],
+                    "-s",
+                    url,
+                ],
+                capture_output=True,
+                check=True,
+            )
+            return result.stdout
+        except Exception:
+            return b""
+
+
+def _fetch_rss_candidates() -> list[NewsCandidate]:
+    items: list[NewsCandidate] = []
+    for url in PGC_NEWS_RSS_URLS:
+        body = _fetch_bytes(url)
+        if not body:
+            continue
+        try:
             root = ET.fromstring(body)
         except Exception:
             continue
@@ -187,6 +220,51 @@ def fetch_news_candidates() -> list[NewsCandidate]:
                     board_name=_board_for_tags(tags),
                 )
             )
+    return items
+
+
+def _fetch_eastmoney_candidates() -> list[NewsCandidate]:
+    items: list[NewsCandidate] = []
+    for url in EASTMONEY_HTML_SOURCES:
+        body = _fetch_bytes(url)
+        if not body:
+            continue
+        text = body.decode("utf-8", "ignore")
+        source = _source_name(url)
+        seen_titles: set[str] = set()
+        for href, raw_text in re.findall(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', text, flags=re.I | re.S):
+            title = _clean_text(re.sub(r'<[^>]+>', '', raw_text))
+            if len(title) < 12:
+                continue
+            if title in seen_titles:
+                continue
+            if 'finance.eastmoney.com/a/' not in href and '/a/' not in href:
+                continue
+            full_link = urllib.parse.urljoin(url, href)
+            tags = _tag_news(title, "")
+            seen_titles.add(title)
+            items.append(
+                NewsCandidate(
+                    external_id=_external_id(source, title, full_link),
+                    source_name=source,
+                    source_url=url,
+                    title=title,
+                    summary="",
+                    link=full_link,
+                    published_at=None,
+                    tags=tags,
+                    board_name=_board_for_tags(tags),
+                )
+            )
+            if len(items) >= 50:
+                break
+    return items
+
+
+def fetch_news_candidates() -> list[NewsCandidate]:
+    items: list[NewsCandidate] = []
+    items.extend(_fetch_rss_candidates())
+    items.extend(_fetch_eastmoney_candidates())
     deduped: dict[str, NewsCandidate] = {}
     for item in items:
         existing = deduped.get(item.external_id)
@@ -320,14 +398,18 @@ def _render_post(item: FinanceNewsItem, agent: User, session: Session) -> tuple[
 
 def _choose_news_to_post(rows: list[FinanceNewsItem]) -> list[FinanceNewsItem]:
     max_age = timedelta(minutes=max(10, int(PGC_MAX_NEWS_AGE_MINUTES)))
+    first_seen_window = timedelta(minutes=10)
     now = _utcnow()
     eligible = []
     for row in rows:
         if row.status == "posted":
             continue
-        ts = row.published_at or row.first_seen_at
-        if ts and now - ts > max_age:
-            continue
+        if row.published_at:
+            if now - row.published_at > max_age:
+                continue
+        else:
+            if row.first_seen_at and now - row.first_seen_at > first_seen_window:
+                continue
         eligible.append(row)
     return eligible[: max(1, int(PGC_POSTS_PER_TICK))]
 
