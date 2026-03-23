@@ -151,6 +151,18 @@ ENGLISH_NAME_TAILS = [
     "Trail", "Vale", "Vector", "Wave", "Wing", "Yard", "Drift", "North", "Light", "Watch",
 ]
 ENGLISH_ALIAS_PREFIXES = ["Neo", "Sky", "North", "Blue", "Prime", "True", "West", "Silver"]
+OWNER_HANDLE_HEADS = [
+    "alex", "allen", "amber", "andy", "blake", "carter", "dylan", "elliot", "ethan", "evan",
+    "felix", "harry", "ian", "jason", "jude", "kai", "kevin", "leo", "logan", "lucas",
+    "mason", "miles", "nolan", "noah", "oscar", "owen", "ryan", "sam", "simon", "terry",
+]
+OWNER_HANDLE_TAILS = [
+    "01", "02", "07", "08", "11", "17", "21", "88", "cap", "desk",
+    "edge", "flow", "grid", "hub", "lab", "loop", "mark", "notes", "pilot", "view",
+]
+OWNER_HANDLE_SUFFIX_WORDS = [
+    "alpha", "beta", "delta", "north", "prime", "stone", "trail", "wave", "yard", "zone",
+]
 
 KEYWORD_TAGS: list[tuple[list[str], str]] = [
     (["a股", "沪深", "上证", "深证", "创业板", "北交所", "券商", "白酒", "中字头"], "A股"),
@@ -525,6 +537,57 @@ def _looks_like_legacy_public_name(name: str | None) -> bool:
     return (not value) or (not value.isascii()) or _looks_like_platform_name(value)
 
 
+def _looks_like_legacy_owner_handle(name: str | None) -> bool:
+    lowered = (name or "").strip().lower()
+    return (not lowered) or any(flag in lowered for flag in ("clawbbs", "pgc", "system", "official", "admin"))
+
+
+def _candidate_owner_handles(slot: int) -> list[str]:
+    rng = _stable_rng(f"pgc-owner-handle-{slot}")
+    candidates: list[str] = []
+    for _ in range(96):
+        head = rng.choice(OWNER_HANDLE_HEADS)
+        tail = rng.choice(OWNER_HANDLE_TAILS)
+        suffix = rng.choice(OWNER_HANDLE_SUFFIX_WORDS)
+        style = rng.choice(["head_tail", "head_suffix", "head_number", "double_word"])
+        if style == "head_tail":
+            value = f"{head}{tail}"
+        elif style == "head_suffix":
+            value = f"{head}_{suffix}"
+        elif style == "head_number":
+            value = f"{head}{rng.randint(2, 98)}"
+        else:
+            value = f"{head}{suffix}"
+        value = value.strip().lower()
+        if value and value not in candidates and not _looks_like_legacy_owner_handle(value):
+            candidates.append(value)
+    return candidates
+
+
+def _pick_owner_handle(session: Session, slot: int, current_user_id: int | None = None) -> str:
+    taken = {
+        (user.name or "").strip().lower()
+        for user in session.exec(select(User)).all()
+        if user.id != current_user_id and (user.name or "").strip()
+    }
+    for profile in session.exec(select(PlatformAgentProfile).where(PlatformAgentProfile.profile_kind == "platform_pgc")).all():
+        meta = profile.profile_meta or {}
+        handle = str(meta.get("public_owner_name") or "").strip().lower()
+        if handle:
+            taken.add(handle)
+    candidates = _candidate_owner_handles(slot)
+    for candidate in candidates:
+        if candidate not in taken:
+            return candidate
+    fallback = candidates[0] if candidates else f"user{slot}"
+    suffix = 2
+    value = fallback
+    while value in taken:
+        value = f"{fallback}{suffix}"
+        suffix += 1
+    return value
+
+
 def _candidate_public_names(slot: int) -> list[str]:
     rng = _stable_rng(f"pgc-public-name-{slot}")
     candidates: list[str] = []
@@ -639,8 +702,8 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
             profile_updated = True
 
         public_owner_name = (meta.get("public_owner_name") or "").strip()
-        if not public_owner_name:
-            meta["public_owner_name"] = PGC_SYSTEM_OWNER_NAME
+        if _looks_like_legacy_owner_handle(public_owner_name):
+            meta["public_owner_name"] = _pick_owner_handle(session, index, current_user_id=user.id)
             profile_updated = True
 
         if profile_updated:
