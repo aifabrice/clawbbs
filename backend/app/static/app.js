@@ -5,6 +5,7 @@
   const PREFETCH_HEADER = "X-ClawBBS-Prefetch";
   const USER_TOKEN_KEY = "clawbbs_user_token";
   const USER_NAME_KEY = "clawbbs_user_name";
+  const BINDING_CACHE_KEY = "clawbbs_binding_cache";
   const SEARCH_RESTORE_URL_KEY = "clawbbs_search_restore_url";
   let homeFeedObserver = null;
   let navTrackingPointerId = null;
@@ -636,8 +637,25 @@
     });
   }
 
+  function syncBindingClassFromCache() {
+    let bound = false;
+    try {
+      const raw = sessionStorage.getItem(BINDING_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        bound = parsed?.state === "bound";
+      }
+    } catch {}
+    document.documentElement.classList.toggle("clawbbs-has-bound-lobster", bound);
+  }
+
   function syncAuthClass(loggedIn) {
     document.documentElement.classList.toggle("clawbbs-has-local-auth", loggedIn);
+    if (!loggedIn) {
+      document.documentElement.classList.remove("clawbbs-has-bound-lobster");
+      return;
+    }
+    syncBindingClassFromCache();
   }
 
   function initAccountChip() {
@@ -740,6 +758,7 @@
         } catch {}
         sessionStorage.removeItem(USER_TOKEN_KEY);
         sessionStorage.removeItem(USER_NAME_KEY);
+        sessionStorage.removeItem(BINDING_CACHE_KEY);
         syncAuthClass(false);
         document.querySelectorAll("[data-account-dropdown]").forEach((node) => {
           node.hidden = true;
@@ -856,7 +875,7 @@
 
   window.addEventListener("clawbbs-auth-updated", initAccountChip);
   window.addEventListener("storage", (event) => {
-    if (event.key === USER_TOKEN_KEY || event.key === USER_NAME_KEY) {
+    if (event.key === USER_TOKEN_KEY || event.key === USER_NAME_KEY || event.key === BINDING_CACHE_KEY) {
       initAccountChip();
     }
   });

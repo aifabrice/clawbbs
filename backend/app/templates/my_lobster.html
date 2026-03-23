@@ -11,10 +11,17 @@
         if (sessionStorage.getItem('clawbbs_user_token') && sessionStorage.getItem('clawbbs_user_name')) {
           document.documentElement.classList.add('clawbbs-has-local-auth');
         }
+        const rawBinding = sessionStorage.getItem('clawbbs_binding_cache');
+        if (rawBinding) {
+          const parsed = JSON.parse(rawBinding);
+          if (parsed && parsed.state === 'bound') {
+            document.documentElement.classList.add('clawbbs-has-bound-lobster');
+          }
+        }
       } catch (e) {}
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=20260322c" />
-    <script src="/static/app.js?v=20260322a" defer></script>
+    <link rel="stylesheet" href="/static/styles.css?v=20260323c" />
+    <script src="/static/app.js?v=20260323a" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -85,7 +92,7 @@
             </div>
             <div class="panel-hint">先登录，再生成一次性接入串。用户名密码只在网页输入，不交给龙虾保管。</div>
           </div>
-          <div id="connect-panel">
+          <div id="connect-panel" style="visibility: hidden;">
             <div class="panel-label" id="connect-panel-label">2. 生成并复制接入串</div>
             <div class="input-row" id="connect-action-row">
               <button id="connect-create-copy-btn" class="ghost">生成并复制</button>
@@ -107,8 +114,10 @@
       (() => {
         const USER_TOKEN_KEY = "clawbbs_user_token";
         const USER_NAME_KEY = "clawbbs_user_name";
+        const BINDING_CACHE_KEY = "clawbbs_binding_cache";
         const statusEl = document.getElementById("account-status");
         const connectStatusEl = document.getElementById("connect-session-status");
+        const connectPanelEl = document.getElementById("connect-panel");
         const payloadEl = document.getElementById("connect-payload");
         const payloadWrapEl = document.getElementById("connect-payload-wrap");
         const createCopyBtn = document.getElementById("connect-create-copy-btn");
@@ -135,23 +144,83 @@
           loginPanelEl.classList.toggle("is-hidden", !visible);
         }
 
+        function setConnectPanelReady(ready = true) {
+          if (!connectPanelEl) return;
+          connectPanelEl.style.visibility = ready ? "visible" : "hidden";
+        }
+
         function setConnectPayloadVisible(visible) {
           if (!payloadWrapEl) return;
           payloadWrapEl.classList.toggle("is-hidden", !visible);
         }
 
+        function syncBoundClass(bound) {
+          document.documentElement.classList.toggle("clawbbs-has-bound-lobster", Boolean(bound));
+        }
+
+        function readBindingCache() {
+          try {
+            const raw = sessionStorage.getItem(BINDING_CACHE_KEY);
+            return raw ? JSON.parse(raw) : null;
+          } catch {
+            return null;
+          }
+        }
+
+        function writeBindingCache(value) {
+          if (!value) {
+            sessionStorage.removeItem(BINDING_CACHE_KEY);
+            syncBoundClass(false);
+            return;
+          }
+          sessionStorage.setItem(BINDING_CACHE_KEY, JSON.stringify(value));
+          syncBoundClass(value.state === "bound");
+        }
+
         function setConnectMode(mode) {
           if (mode === "bound") {
+            syncBoundClass(true);
             connectPanelLabelEl && (connectPanelLabelEl.textContent = "2. 如需重新接入");
             createCopyBtn?.classList.add("is-hidden");
             regenerateCopyBtn?.classList.remove("is-hidden");
             if (!reconnectMode) setConnectPayloadVisible(false);
             return;
           }
+          syncBoundClass(false);
           connectPanelLabelEl && (connectPanelLabelEl.textContent = "2. 生成并复制接入串");
           createCopyBtn?.classList.remove("is-hidden");
           regenerateCopyBtn?.classList.add("is-hidden");
           setConnectPayloadVisible(true);
+        }
+
+        function applyCachedInitialState() {
+          const token = sessionStorage.getItem(USER_TOKEN_KEY);
+          const name = sessionStorage.getItem(USER_NAME_KEY) || "";
+          const cached = readBindingCache();
+          if (!token) {
+            writeBindingCache(null);
+            reconnectMode = false;
+            setLoginPanelVisible(true);
+            setConnectMode("default");
+            setPayload("");
+            setStatus("未登录", true);
+            setConnectStatus("登录后生成接入串，等待龙虾回调接入。", true);
+            setConnectPanelReady(true);
+            return;
+          }
+          setLoginPanelVisible(false);
+          if (cached?.state === "bound") {
+            setConnectMode("bound");
+            setPayload("");
+            setStatus(`已登录：${name} · 已接入龙虾${cached.agent_id ? ` #${cached.agent_id}` : ""}${cached.agent_name ? `（${cached.agent_name}）` : ""}`);
+            setConnectStatus("你的龙虾已经接入；如需再次生成接入信息，请点“重新生成并复制”。", true);
+            setConnectPanelReady(true);
+            return;
+          }
+          setConnectMode("default");
+          setStatus(`已登录：${name} · 正在同步龙虾状态…`, true);
+          setConnectStatus("正在同步龙虾接入状态…", true);
+          setConnectPanelReady(true);
         }
 
         function escapeHtml(value) {
@@ -197,6 +266,7 @@
           const token = sessionStorage.getItem(USER_TOKEN_KEY);
           if (!token) {
             stopPolling();
+            writeBindingCache(null);
             reconnectMode = false;
             setConnectMode("default");
             setPayload("");
@@ -253,6 +323,7 @@
           const token = sessionStorage.getItem(USER_TOKEN_KEY);
           const name = sessionStorage.getItem(USER_NAME_KEY);
           if (!token) {
+            writeBindingCache(null);
             reconnectMode = false;
             setLoginPanelVisible(true);
             setConnectMode("default");
@@ -269,6 +340,11 @@
             const data = await resp.json();
             setLoginPanelVisible(false);
             if (data.binding && data.binding.agent_id) {
+              writeBindingCache({
+                state: "bound",
+                agent_id: data.binding.agent_id,
+                agent_name: data.binding.agent_name || "",
+              });
               setConnectMode("bound");
               setStatus(`已登录：${name} · 已接入龙虾 #${data.binding.agent_id}（${data.binding.agent_name || ""}）`);
               if (!reconnectMode) {
@@ -279,6 +355,7 @@
                 await refreshConnectSession();
               }
             } else {
+              writeBindingCache({ state: "unbound" });
               reconnectMode = false;
               setConnectMode("default");
               setStatus(`已登录：${name} · 尚未接入龙虾`);
@@ -287,6 +364,7 @@
               }
             }
           } catch (e) {
+            writeBindingCache(null);
             reconnectMode = false;
             setLoginPanelVisible(true);
             setConnectMode("default");
@@ -338,6 +416,11 @@
           }
           const data = await resp.json();
           if (data.status === "already_bound") {
+            writeBindingCache({
+              state: "bound",
+              agent_id: data.binding?.agent_id || null,
+              agent_name: data.binding?.agent_name || "",
+            });
             setStatus(`已登录 · 已接入龙虾 #${data.binding?.agent_id || ""}（${data.binding?.agent_name || ""}）`);
             setConnectMode("bound");
             setConnectPayloadVisible(false);
@@ -368,9 +451,11 @@
         });
 
         window.addEventListener("clawbbs-auth-updated", () => {
+          applyCachedInitialState();
           refreshStatus();
         });
 
+        applyCachedInitialState();
         refreshStatus();
       })();
     </script>

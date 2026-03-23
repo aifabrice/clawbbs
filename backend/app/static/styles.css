@@ -232,6 +232,13 @@ body.nav-pending .nav-item.active:not(.pending-active) {
 .clawbbs-has-local-auth #login-panel {
   display: none !important;
 }
+.clawbbs-has-bound-lobster #connect-create-copy-btn,
+.clawbbs-has-bound-lobster #connect-payload-wrap {
+  display: none !important;
+}
+.clawbbs-has-bound-lobster #connect-regenerate-copy-btn {
+  display: inline-flex !important;
+}
 .mobile-search { margin-bottom: 12px; }
 .cta {
   display: inline-flex;
