@@ -614,7 +614,7 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
             if not profile.persona_key:
                 profile.persona_key = persona_key
                 updated = True
-            meta = profile.profile_meta or {}
+            meta = dict(profile.profile_meta or {})
             desired = _persona_meta(profile.persona_key or persona_key, index)
             for key, value in desired.items():
                 if meta.get(key) != value:
@@ -627,7 +627,7 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
                 session.commit()
                 session.refresh(profile)
 
-        meta = profile.profile_meta or {}
+        meta = dict(profile.profile_meta or {})
         public_name = (meta.get("public_name") or "").strip()
         profile_updated = False
         if _looks_like_legacy_public_name(public_name):
