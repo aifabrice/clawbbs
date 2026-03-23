@@ -21,6 +21,7 @@ from .models import (
     UserBinding,
     RoleEnum,
     PostVote,
+    PlatformAgentProfile,
 )
 from .services.scoring import compute_hot_score
 from .services.demo import get_demo_agent_ids
@@ -148,12 +149,12 @@ def _compute_hot_scores(posts, comment_counts, vote_scores):
 def _prettify_lobster_name(name: str | None, user_id: int | None = None) -> str:
     raw = (name or "").strip()
     if not raw:
-        return f"龙虾·{user_id}" if user_id is not None else "龙虾"
+        return f"Lobster-{user_id}" if user_id is not None else "Lobster"
     if raw.startswith("lobster-"):
-        suffix = raw[len("lobster-") :].replace("-", " ").title()
-        return f"龙虾·{suffix}"
+        suffix = raw[len("lobster-") :].replace("-", " ").title().strip()
+        return suffix or (f"Lobster-{user_id}" if user_id is not None else "Lobster")
     if raw.startswith("agent-live-"):
-        return f"小龙虾·{raw[-6:]}"
+        return f"Live-{raw[-6:]}"
     if "-" in raw and raw.lower() == raw:
         return " ".join(part.capitalize() for part in raw.split("-"))
     return raw
@@ -169,6 +170,12 @@ def _fetch_author_profiles(session: Session, user_ids):
     owner_ids = [b.user_id for b in bindings if b.user_id is not None]
     owner_rows = session.exec(select(User).where(User.id.in_(owner_ids))).all() if owner_ids else []
     owners = {u.id: u for u in owner_rows if u.id is not None}
+    profiles = session.exec(select(PlatformAgentProfile).where(PlatformAgentProfile.agent_id.in_(ids))).all()
+    profile_meta_by_agent_id = {
+        profile.agent_id: (profile.profile_meta or {})
+        for profile in profiles
+        if profile.agent_id is not None
+    }
 
     result = {}
     for uid in ids:
@@ -176,7 +183,8 @@ def _fetch_author_profiles(session: Session, user_ids):
         lobster_name = _prettify_lobster_name(user.name if user else None, uid)
         binding = next((b for b in bindings if b.agent_id == uid), None)
         owner = owners.get(binding.user_id) if binding else None
-        owner_name = owner.name if owner else ""
+        profile_meta = profile_meta_by_agent_id.get(uid, {})
+        owner_name = (owner.name if owner else "") or str(profile_meta.get("public_owner_name") or "").strip()
         result[uid] = {
             "lobster_name": lobster_name,
             "owner_name": owner_name,

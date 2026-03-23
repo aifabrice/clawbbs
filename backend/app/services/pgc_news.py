@@ -140,22 +140,17 @@ PERSONA_PROFILES: dict[str, dict[str, str]] = {
 }
 PERSONA_KEYS = list(PERSONA_PROFILES.keys())
 
-HUMAN_NAME_SURNAMES = [
-    "林", "周", "沈", "许", "顾", "程", "宋", "方", "陆", "江",
-    "苏", "季", "严", "何", "梁", "韩", "陈", "谢", "邵", "唐",
-    "贺", "高", "叶", "温", "姜", "袁", "傅", "徐", "钟", "白",
+ENGLISH_NAME_HEADS = [
+    "Aster", "Atlas", "Beacon", "Blaze", "Cedar", "Cobalt", "Comet", "Drift", "Echo", "Ember",
+    "Finch", "Flint", "Harbor", "Helix", "Indigo", "Jasper", "Kite", "Lumen", "Marlow", "Nova",
+    "Onyx", "Orion", "Pace", "Quill", "Radar", "River", "Slate", "Spark", "Sterling", "Summit",
 ]
-HUMAN_NAME_GIVEN_FIRST = [
-    "知", "景", "云", "书", "言", "安", "亦", "予", "一", "可",
-    "向", "南", "西", "时", "清", "宁", "以", "见", "成", "明",
-    "远", "星", "舟", "雨", "子", "初", "少", "维", "嘉", "庭",
+ENGLISH_NAME_TAILS = [
+    "Arc", "Bay", "Bridge", "Cliff", "Core", "Cove", "Field", "Forge", "Grove", "Harbor",
+    "Hill", "Lane", "Peak", "Point", "Pulse", "Ridge", "Scope", "Signal", "Spring", "Stone",
+    "Trail", "Vale", "Vector", "Wave", "Wing", "Yard", "Drift", "North", "Light", "Watch",
 ]
-HUMAN_NAME_GIVEN_SECOND = [
-    "远", "舟", "川", "宁", "言", "然", "安", "禾", "野", "辰",
-    "微", "青", "白", "川", "临", "航", "铭", "泽", "尧", "航",
-    "山", "景", "乐", "清", "衡", "成", "木", "知", "行", "北",
-]
-HUMAN_ALIAS_PREFIXES = ["阿", "小", "老"]
+ENGLISH_ALIAS_PREFIXES = ["Neo", "Sky", "North", "Blue", "Prime", "True", "West", "Silver"]
 
 KEYWORD_TAGS: list[tuple[list[str], str]] = [
     (["a股", "沪深", "上证", "深证", "创业板", "北交所", "券商", "白酒", "中字头"], "A股"),
@@ -525,20 +520,24 @@ def _looks_like_platform_name(name: str | None) -> bool:
     return lowered.startswith(PGC_AGENT_NAME_PREFIX) or "pgc" in lowered or "lobster" in lowered
 
 
+def _looks_like_legacy_public_name(name: str | None) -> bool:
+    value = (name or "").strip()
+    return (not value) or (not value.isascii()) or _looks_like_platform_name(value)
+
+
 def _candidate_public_names(slot: int) -> list[str]:
     rng = _stable_rng(f"pgc-public-name-{slot}")
     candidates: list[str] = []
-    for _ in range(48):
-        surname = rng.choice(HUMAN_NAME_SURNAMES)
-        given_first = rng.choice(HUMAN_NAME_GIVEN_FIRST)
-        given_second = rng.choice(HUMAN_NAME_GIVEN_SECOND)
-        style = rng.choice(["full", "full", "full", "short", "short", "nick"])
-        if style == "full":
-            value = f"{surname}{given_first}{given_second}"
-        elif style == "short":
-            value = f"{surname}{given_second}"
+    for _ in range(80):
+        head = rng.choice(ENGLISH_NAME_HEADS)
+        tail = rng.choice(ENGLISH_NAME_TAILS)
+        style = rng.choice(["single", "double", "double", "compact"])
+        if style == "single":
+            value = head
+        elif style == "double":
+            value = f"{head} {tail}"
         else:
-            value = f"{rng.choice(HUMAN_ALIAS_PREFIXES)}{given_second}"
+            value = f"{rng.choice(ENGLISH_ALIAS_PREFIXES)}{tail}"
         value = value.strip()
         if value and value not in candidates and not _looks_like_platform_name(value):
             candidates.append(value)
@@ -551,14 +550,15 @@ def _pick_public_name(session: Session, slot: int, current_user_id: int | None =
         for user in session.exec(select(User)).all()
         if user.id != current_user_id and (user.name or "").strip()
     }
-    for candidate in _candidate_public_names(slot):
+    candidates = _candidate_public_names(slot)
+    for candidate in candidates:
         if candidate not in taken:
             return candidate
-    fallback = _candidate_public_names(slot)[0] if _candidate_public_names(slot) else "知远"
+    fallback = candidates[0] if candidates else "Aster"
     suffix = 2
     value = fallback
     while value in taken:
-        value = f"{fallback}{suffix}"
+        value = f"{fallback} {suffix}"
         suffix += 1
     return value
 
@@ -629,12 +629,21 @@ def ensure_pgc_agents(session: Session, pool_size: int | None = None) -> list[Us
 
         meta = profile.profile_meta or {}
         public_name = (meta.get("public_name") or "").strip()
-        if not public_name:
-            if user.name and not _looks_like_platform_name(user.name):
+        profile_updated = False
+        if _looks_like_legacy_public_name(public_name):
+            if user.name and not _looks_like_legacy_public_name(user.name):
                 public_name = user.name.strip()
             else:
                 public_name = _pick_public_name(session, index, current_user_id=user.id)
             meta["public_name"] = public_name
+            profile_updated = True
+
+        public_owner_name = (meta.get("public_owner_name") or "").strip()
+        if not public_owner_name:
+            meta["public_owner_name"] = PGC_SYSTEM_OWNER_NAME
+            profile_updated = True
+
+        if profile_updated:
             profile.profile_meta = meta
             profile.updated_at = _utcnow()
             session.add(profile)

@@ -284,7 +284,7 @@
         <div class="m-head">
           <div class="avatar" aria-hidden="true"></div>
           <div class="m-author">
-            <div class="name author-label"><span class="author-primary">${escapeHtml(item.lobster_name || item.author_name || `龙虾·${item.author_id}`)}</span>${item.owner_name ? `<span class="author-secondary">@${escapeHtml(item.owner_name)}</span>` : ""}</div>
+            <div class="name author-label"><span class="author-primary">${escapeHtml(item.lobster_name || item.author_name || `Lobster-${item.author_id}`)}</span>${item.owner_name ? `<span class="author-secondary">@${escapeHtml(item.owner_name)}</span>` : ""}</div>
             <div class="meta">${escapeHtml(item.created_at)}</div>
           </div>
           <button class="follow" data-follow-agent-id="${escapeHtml(item.author_id)}">关注</button>
