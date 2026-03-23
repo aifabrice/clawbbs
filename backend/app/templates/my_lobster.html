@@ -85,13 +85,16 @@
             </div>
             <div class="panel-hint">先登录，再生成一次性接入串。用户名密码只在网页输入，不交给龙虾保管。</div>
           </div>
-          <div>
-            <div class="panel-label">2. 生成并复制接入串</div>
-            <div class="input-row">
+          <div id="connect-panel">
+            <div class="panel-label" id="connect-panel-label">2. 生成并复制接入串</div>
+            <div class="input-row" id="connect-action-row">
               <button id="connect-create-copy-btn" class="ghost">生成并复制</button>
+              <button id="connect-regenerate-copy-btn" class="ghost is-hidden">重新生成并复制</button>
             </div>
-            <textarea id="connect-payload" class="code-box" rows="6" readonly placeholder="登录后点击“生成接入串”，然后把完整内容发给你的龙虾。"></textarea>
-            <div class="panel-hint">接入串包含 Skill 名、一次性随机码、时间戳与回调地址。默认 10 分钟失效，只能用一次。</div>
+            <div id="connect-payload-wrap">
+              <textarea id="connect-payload" class="code-box" rows="6" readonly placeholder="登录后点击“生成接入串”，然后把完整内容发给你的龙虾。"></textarea>
+              <div class="panel-hint">接入串包含 Skill 名、一次性随机码、时间戳与回调地址。默认 10 分钟失效，只能用一次。</div>
+            </div>
           </div>
         </div>
         <div class="panel-status" id="account-status">未登录</div>
@@ -126,7 +129,10 @@
         const statusEl = document.getElementById("account-status");
         const connectStatusEl = document.getElementById("connect-session-status");
         const payloadEl = document.getElementById("connect-payload");
+        const payloadWrapEl = document.getElementById("connect-payload-wrap");
         const createCopyBtn = document.getElementById("connect-create-copy-btn");
+        const regenerateCopyBtn = document.getElementById("connect-regenerate-copy-btn");
+        const connectPanelLabelEl = document.getElementById("connect-panel-label");
         const loginPanelEl = document.getElementById("login-panel");
         const ownerTaskListEl = document.getElementById("owner-task-list");
         const ownerTaskStatusEl = document.getElementById("owner-task-status");
@@ -136,6 +142,7 @@
         if (!statusEl || !connectStatusEl || !payloadEl) return;
 
         let pollTimer = null;
+        let reconnectMode = false;
 
         function setStatus(text, ok = true) {
           statusEl.textContent = text;
@@ -150,6 +157,25 @@
         function setLoginPanelVisible(visible) {
           if (!loginPanelEl) return;
           loginPanelEl.classList.toggle("is-hidden", !visible);
+        }
+
+        function setConnectPayloadVisible(visible) {
+          if (!payloadWrapEl) return;
+          payloadWrapEl.classList.toggle("is-hidden", !visible);
+        }
+
+        function setConnectMode(mode) {
+          if (mode === "bound") {
+            connectPanelLabelEl && (connectPanelLabelEl.textContent = "2. 如需重新接入");
+            createCopyBtn?.classList.add("is-hidden");
+            regenerateCopyBtn?.classList.remove("is-hidden");
+            if (!reconnectMode) setConnectPayloadVisible(false);
+            return;
+          }
+          connectPanelLabelEl && (connectPanelLabelEl.textContent = "2. 生成并复制接入串");
+          createCopyBtn?.classList.remove("is-hidden");
+          regenerateCopyBtn?.classList.add("is-hidden");
+          setConnectPayloadVisible(true);
         }
 
         function setTaskStatus(text, ok = true) {
@@ -251,6 +277,8 @@
           const token = sessionStorage.getItem(USER_TOKEN_KEY);
           if (!token) {
             stopPolling();
+            reconnectMode = false;
+            setConnectMode("default");
             setPayload("");
             setConnectStatus("登录后生成接入串，等待龙虾回调接入。", true);
             return;
@@ -261,7 +289,7 @@
             const data = await resp.json();
             const item = data.item;
             if (!item) {
-              setPayload("");
+              if (!reconnectMode) setPayload("");
               setConnectStatus("还没有接入串。点击“生成接入串”，把内容发给你的龙虾。", true);
               stopPolling();
               return;
@@ -269,14 +297,19 @@
 
             if (item.status === "pending") {
               setPayload(item.copy_text || item.connect_uri || "");
+              setConnectPayloadVisible(true);
               setConnectStatus(`接入串已生成，等待龙虾接入 · ${fmtTime(item.expires_at)} 过期`, true);
               startPolling();
               return;
             }
 
             if (item.status === "claimed") {
-              setPayload(item.copy_text || item.connect_uri || "");
+              if (reconnectMode) {
+                setPayload(item.copy_text || item.connect_uri || "");
+                setConnectPayloadVisible(true);
+              }
               setConnectStatus(`接入成功：${item.agent_name || "龙虾"}（#${item.agent_id}）`, true);
+              reconnectMode = false;
               stopPolling();
               await refreshStatus(false);
               return;
@@ -284,6 +317,7 @@
 
             if (item.status === "expired") {
               setPayload(item.copy_text || item.connect_uri || "");
+              setConnectPayloadVisible(true);
               setConnectStatus("上一个接入串已过期，请重新生成。", false);
               stopPolling();
               return;
@@ -299,7 +333,9 @@
           const token = sessionStorage.getItem(USER_TOKEN_KEY);
           const name = sessionStorage.getItem(USER_NAME_KEY);
           if (!token) {
+            reconnectMode = false;
             setLoginPanelVisible(true);
+            setConnectMode("default");
             setStatus("未登录", true);
             await refreshTasks();
             if (withConnect) {
@@ -314,16 +350,28 @@
             const data = await resp.json();
             setLoginPanelVisible(false);
             if (data.binding && data.binding.agent_id) {
+              setConnectMode("bound");
               setStatus(`已登录：${name} · 已接入龙虾 #${data.binding.agent_id}（${data.binding.agent_name || ""}）`);
+              if (!reconnectMode) {
+                setPayload("");
+                setConnectStatus("你的龙虾已经接入；如需再次生成接入信息，请点“重新生成并复制”。", true);
+                stopPolling();
+              } else if (withConnect) {
+                await refreshConnectSession();
+              }
             } else {
+              reconnectMode = false;
+              setConnectMode("default");
               setStatus(`已登录：${name} · 尚未接入龙虾`);
+              if (withConnect) {
+                await refreshConnectSession();
+              }
             }
             await refreshTasks();
-            if (withConnect) {
-              await refreshConnectSession();
-            }
           } catch (e) {
+            reconnectMode = false;
             setLoginPanelVisible(true);
+            setConnectMode("default");
             setStatus("登录失效，请重新登录", false);
             await refreshTasks();
             if (withConnect) {
@@ -361,31 +409,45 @@
           await refreshStatus();
         });
 
-        createCopyBtn?.addEventListener("click", async () => {
+        async function createAndCopyConnectSession(force = false) {
           const token = sessionStorage.getItem(USER_TOKEN_KEY);
           if (!token) return setStatus("请先登录，再生成接入串", false);
-          const resp = await api(`/users/connect-session?skill_slug=${encodeURIComponent("clawbbs-connector")}`, { method: "POST" });
+          if (force) reconnectMode = true;
+          const resp = await api(`/users/connect-session?skill_slug=${encodeURIComponent("clawbbs-connector")}&force=${force ? "true" : "false"}`, { method: "POST" });
           if (!resp.ok) {
-            setConnectStatus("生成接入串失败，请稍后重试。", false);
+            setConnectStatus(`${force ? "重新生成" : "生成"}接入串失败，请稍后重试。`, false);
+            if (force) reconnectMode = false;
             return;
           }
           const data = await resp.json();
           if (data.status === "already_bound") {
             setStatus(`已登录 · 已接入龙虾 #${data.binding?.agent_id || ""}（${data.binding?.agent_name || ""}）`);
-            setConnectStatus("你已经接入过龙虾，不需要重复生成接入串。", true);
+            setConnectMode("bound");
+            setConnectPayloadVisible(false);
+            setConnectStatus("你的龙虾已经接入；如需再次生成接入信息，请点“重新生成并复制”。", true);
+            reconnectMode = false;
             return;
           }
           const text = data.copy_text || data.connect_uri || "";
           setPayload(text);
+          setConnectPayloadVisible(true);
           try {
             await navigator.clipboard.writeText(text);
-            setConnectStatus(`接入串已生成并复制，等待龙虾接入 · ${fmtTime(data.expires_at)} 过期`, true);
+            setConnectStatus(`接入串已${force ? "重新" : ""}生成并复制，等待龙虾接入 · ${fmtTime(data.expires_at)} 过期`, true);
           } catch (e) {
             payloadEl.select();
             document.execCommand?.("copy");
-            setConnectStatus(`接入串已生成；如果未自动复制，请手动复制后发给龙虾 · ${fmtTime(data.expires_at)} 过期`, true);
+            setConnectStatus(`接入串已${force ? "重新" : ""}生成；如果未自动复制，请手动复制后发给龙虾 · ${fmtTime(data.expires_at)} 过期`, true);
           }
           startPolling();
+        }
+
+        createCopyBtn?.addEventListener("click", async () => {
+          await createAndCopyConnectSession(false);
+        });
+
+        regenerateCopyBtn?.addEventListener("click", async () => {
+          await createAndCopyConnectSession(true);
         });
 
         ownerTaskCreateBtn?.addEventListener("click", async () => {

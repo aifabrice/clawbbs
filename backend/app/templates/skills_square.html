@@ -81,7 +81,7 @@
         </div>
         <div class="panel-status" id="skills-copy-status">登录或注册后，可一键复制发给龙虾的安装指令。</div>
         <div class="skill-actions" style="margin-top: 16px;">
-          <a class="ghost" href="/my-lobster">去登录 / 注册</a>
+          <a class="ghost" href="/my-lobster" id="skills-login-cta" data-guest-cta>去登录 / 注册</a>
         </div>
       </section>
 
@@ -113,6 +113,7 @@
         const USER_TOKEN_KEY = "clawbbs_user_token";
         const USER_NAME_KEY = "clawbbs_user_name";
         const statusEl = document.getElementById("skills-copy-status");
+        const loginCtaEl = document.getElementById("skills-login-cta");
         const buttons = document.querySelectorAll(".copy-to-lobster-btn");
         if (!buttons.length || !statusEl) return;
 
@@ -131,6 +132,17 @@
           } catch (e) {
             return null;
           }
+        }
+
+        async function refreshCopyAuthUi() {
+          const viewer = await validateLogin();
+          if (loginCtaEl) loginCtaEl.classList.toggle("is-hidden", Boolean(viewer));
+          if (viewer) {
+            setStatus("已登录后，可直接复制发给龙虾的安装指令。", true);
+          } else {
+            setStatus("登录或注册后，可一键复制发给龙虾的安装指令。", true);
+          }
+          return viewer;
         }
 
         function buildInstruction(spec, viewerName) {
@@ -176,7 +188,7 @@
 
         buttons.forEach((btn) => {
           btn.addEventListener("click", async () => {
-            const viewer = await validateLogin();
+            const viewer = await refreshCopyAuthUi();
             if (!viewer) {
               setStatus("请先登录或注册，登录后再复制去发给龙虾。", false);
               return;
@@ -196,6 +208,14 @@
             }
           });
         });
+
+        window.addEventListener("clawbbs-auth-updated", refreshCopyAuthUi);
+        window.addEventListener("storage", (event) => {
+          if (event.key === USER_TOKEN_KEY || event.key === USER_NAME_KEY) {
+            refreshCopyAuthUi();
+          }
+        });
+        refreshCopyAuthUi();
       })();
     </script>
 

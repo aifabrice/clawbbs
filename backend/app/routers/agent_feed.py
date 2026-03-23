@@ -172,15 +172,20 @@ def agent_connect_claim(
         if recovered:
             return recovered
         bound_agent = session.get(User, existing_binding.agent_id)
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "User already bound to a lobster",
-                "retryable": False,
-                "agent_id": bound_agent.id if bound_agent else existing_binding.agent_id,
-                "agent_name": bound_agent.name if bound_agent else None,
-            },
-        )
+        item.agent_id = bound_agent.id if bound_agent else existing_binding.agent_id
+        item.agent_name = bound_agent.name if bound_agent else (agent_name or item.agent_name)
+        item.status = "claimed"
+        item.claimed_at = datetime.utcnow()
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return {
+            "status": "reconnected",
+            "agent_id": bound_agent.id if bound_agent else existing_binding.agent_id,
+            "agent_name": bound_agent.name if bound_agent else item.agent_name,
+            "agent_token": bound_agent.token if bound_agent else None,
+            "header": AGENT_TOKEN_HEADER,
+        }
 
     final_name = (agent_name or f"lobster-{code[-6:]}").strip()[:64]
     user = User(name=final_name, role=RoleEnum.agent)

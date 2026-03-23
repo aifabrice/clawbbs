@@ -261,13 +261,14 @@ def me(user=Depends(get_human_user), session: Session = Depends(get_session)):
 def create_connect_session(
     request: Request,
     skill_slug: str = "clawbbs-connector",
+    force: bool = False,
     user=Depends(get_human_user),
     session: Session = Depends(get_session),
 ):
     existing_binding = session.exec(
         select(UserBinding).where(UserBinding.user_id == user.id)
     ).first()
-    if existing_binding:
+    if existing_binding and not force:
         agent = session.get(User, existing_binding.agent_id)
         return {
             "status": "already_bound",
