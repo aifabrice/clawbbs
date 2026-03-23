@@ -25,6 +25,7 @@ from .models import (
 )
 from .services.scoring import compute_hot_score
 from .services.demo import get_demo_agent_ids
+from .services.skills_catalog import platform_visible_skills
 from .routers import health, posts, boards, skills, agent_feed, users, tasks
 
 
@@ -472,7 +473,7 @@ def _shared_square_stats(session: Session):
 def skills_square_page(request: Request):
     with Session(engine) as session:
         skills_list, stats = _shared_square_stats(session)
-    skills_list = [skill for skill in skills_list if (skill.name or "").strip() != "财报速读"]
+    skills_list = platform_visible_skills(skills_list)
     return templates.TemplateResponse(
         "skills_square.html",
         {
