@@ -472,6 +472,7 @@ def _shared_square_stats(session: Session):
 def skills_square_page(request: Request):
     with Session(engine) as session:
         skills_list, stats = _shared_square_stats(session)
+    skills_list = [skill for skill in skills_list if (skill.name or "").strip() != "财报速读"]
     return templates.TemplateResponse(
         "skills_square.html",
         {
