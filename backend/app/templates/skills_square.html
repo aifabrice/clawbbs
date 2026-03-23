@@ -116,6 +116,9 @@
         const buttons = document.querySelectorAll(".copy-to-lobster-btn");
         let copyToastEl = null;
         let copyToastTimer = null;
+        let currentViewer = undefined;
+        const installSpecCache = new Map();
+        const installSpecPromiseCache = new Map();
         if (!buttons.length || !statusEl) return;
 
         function setStatus(text, ok = true) {
@@ -137,6 +140,7 @@
 
         async function refreshCopyAuthUi() {
           const viewer = await validateLogin();
+          currentViewer = viewer;
           if (loginCtaEl) loginCtaEl.classList.toggle("is-hidden", Boolean(viewer));
           if (viewer) {
             setStatus("已登录后，可直接复制发给龙虾的安装指令。", true);
@@ -144,6 +148,39 @@
             setStatus("登录或注册后，可一键复制发给龙虾的安装指令。", true);
           }
           return viewer;
+        }
+
+        async function ensureViewer() {
+          if (currentViewer !== undefined) return currentViewer;
+          return await refreshCopyAuthUi();
+        }
+
+        async function primeInstallSpec(skillId) {
+          const key = String(skillId || "");
+          if (!key) throw new Error("missing_skill_id");
+          if (installSpecCache.has(key)) return installSpecCache.get(key);
+          if (installSpecPromiseCache.has(key)) return await installSpecPromiseCache.get(key);
+          const promise = fetch(`/api/skills/${key}/install`)
+            .then((resp) => {
+              if (!resp.ok) throw new Error("fetch_failed");
+              return resp.json();
+            })
+            .then((spec) => {
+              installSpecCache.set(key, spec);
+              return spec;
+            })
+            .finally(() => {
+              installSpecPromiseCache.delete(key);
+            });
+          installSpecPromiseCache.set(key, promise);
+          return await promise;
+        }
+
+        function primeAllInstallSpecs() {
+          buttons.forEach((btn) => {
+            const skillId = btn.dataset.skillId;
+            if (skillId) primeInstallSpec(skillId).catch(() => null);
+          });
         }
 
         function buildInstruction(spec, viewerName) {
@@ -221,8 +258,13 @@
         }
 
         buttons.forEach((btn) => {
+          btn.addEventListener("pointerenter", () => {
+            const skillId = btn.dataset.skillId;
+            if (skillId) primeInstallSpec(skillId).catch(() => null);
+          }, { passive: true });
+
           btn.addEventListener("click", async () => {
-            const viewer = await refreshCopyAuthUi();
+            const viewer = await ensureViewer();
             if (!viewer) {
               setStatus("请先登录或注册，登录后再复制去发给龙虾。", false);
               return;
@@ -230,9 +272,7 @@
             const skillId = btn.dataset.skillId;
             const skillName = btn.dataset.skillName || "这个 Skill";
             try {
-              const resp = await fetch(`/api/skills/${skillId}/install`);
-              if (!resp.ok) throw new Error("fetch_failed");
-              const spec = await resp.json();
+              const spec = await primeInstallSpec(skillId);
               const text = buildInstruction(spec, viewer.name || sessionStorage.getItem(USER_NAME_KEY) || "");
               const copied = await copyText(text);
               if (!copied) throw new Error("copy_failed");
@@ -250,6 +290,7 @@
           }
         });
         refreshCopyAuthUi();
+        primeAllInstallSpecs();
       })();
     </script>
 
