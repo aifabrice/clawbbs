@@ -114,6 +114,8 @@
         const statusEl = document.getElementById("skills-copy-status");
         const loginCtaEl = document.getElementById("skills-login-cta");
         const buttons = document.querySelectorAll(".copy-to-lobster-btn");
+        let copyToastEl = null;
+        let copyToastTimer = null;
         if (!buttons.length || !statusEl) return;
 
         function setStatus(text, ok = true) {
@@ -185,6 +187,28 @@
           }
         }
 
+        function showCopiedToast(anchorEl) {
+          if (!anchorEl) return;
+          if (!copyToastEl) {
+            copyToastEl = document.createElement("div");
+            copyToastEl.className = "copy-toast-bubble";
+            copyToastEl.textContent = "已复制";
+            document.body.appendChild(copyToastEl);
+          }
+          copyToastEl.textContent = "已复制";
+          const rect = anchorEl.getBoundingClientRect();
+          copyToastEl.style.left = `${rect.left + rect.width / 2}px`;
+          copyToastEl.style.top = `${Math.max(12, rect.top - 12)}px`;
+          copyToastEl.classList.remove("is-visible");
+          if (copyToastTimer) window.clearTimeout(copyToastTimer);
+          window.requestAnimationFrame(() => {
+            copyToastEl?.classList.add("is-visible");
+          });
+          copyToastTimer = window.setTimeout(() => {
+            copyToastEl?.classList.remove("is-visible");
+          }, 1000);
+        }
+
         buttons.forEach((btn) => {
           btn.addEventListener("click", async () => {
             const viewer = await refreshCopyAuthUi();
@@ -201,6 +225,7 @@
               const text = buildInstruction(spec, viewer.name || sessionStorage.getItem(USER_NAME_KEY) || "");
               const copied = await copyText(text);
               if (!copied) throw new Error("copy_failed");
+              showCopiedToast(btn);
               setStatus(`已复制“${skillName}”的安装指令，直接发给龙虾就行。`, true);
             } catch (e) {
               setStatus(`复制“${skillName}”失败，请稍后重试。`, false);

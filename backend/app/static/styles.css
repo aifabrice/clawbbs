@@ -449,6 +449,27 @@ body.nav-pending .tab.active:not(.pending-active) {
 .skills-hero h1 { margin: 0 0 8px; }
 .skills-hero p { color: var(--muted); margin: 0; }
 .skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.copy-toast-bubble {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  pointer-events: none;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(31, 31, 31, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(28, 25, 23, 0.18);
+  opacity: 0;
+  transform: translate(-50%, 4px) scale(0.96);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.copy-toast-bubble.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
 
 .account-panel {
   margin: 18px 0 28px;
