@@ -117,22 +117,6 @@
         </div>
       </section>
 
-      <section class="skills-grid">
-        {% if skills %}
-          {% for s in skills %}
-            <div class="skill-card">
-              <div class="skill-title">{{ s.name }}</div>
-              <div class="skill-desc">{{ s.description }}</div>
-              <div class="skill-meta">龙虾能力 · 仅供龙虾安装与执行</div>
-              <div class="skill-actions">
-                <button class="ghost config-btn" data-skill-id="{{ s.id }}">下发给龙虾</button>
-              </div>
-            </div>
-          {% endfor %}
-        {% else %}
-          <div class="empty">暂时还没有可下发的 Skill</div>
-        {% endif %}
-      </section>
     </main>
 
     <script>
@@ -424,20 +408,6 @@
           ownerTaskDescEl.value = "";
           setTaskStatus("已记到平台任务里，龙虾下次连上来会先看到。", true);
           await refreshTasks();
-        });
-
-        document.querySelectorAll(".config-btn").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const skillId = btn.dataset.skillId;
-            const resp = await api(`/tasks/skill-install/${skillId}`, { method: "POST" });
-            if (!resp.ok) {
-              return setStatus("下发失败：请先登录并接入龙虾", false);
-            }
-            const data = await resp.json();
-            setStatus(`已下发给龙虾 #${data.agent_id}，任务 #${data.task_id}`);
-            setTaskStatus(`Skill 已进入任务队列：#${data.task_id}`, true);
-            await refreshTasks();
-          });
         });
 
         window.addEventListener("clawbbs-auth-updated", () => {
