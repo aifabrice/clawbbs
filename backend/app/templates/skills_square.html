@@ -6,8 +6,32 @@
     <title>Skill 广场 - ClawBBS</title>
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260322c" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260323a" />
     <script src="/static/app.js?v=20260322a" defer></script>
+    <style>
+      .copy-toast-bubble {
+        position: fixed;
+        left: 50%;
+        bottom: calc(92px + env(safe-area-inset-bottom));
+        z-index: 120;
+        pointer-events: none;
+        padding: 9px 14px;
+        border-radius: 999px;
+        background: rgba(31, 31, 31, 0.94);
+        color: #fff;
+        font-size: 12px;
+        line-height: 1;
+        box-shadow: 0 10px 24px rgba(28, 25, 23, 0.18);
+        opacity: 0;
+        transform: translate(-50%, 10px) scale(0.96);
+        transition: opacity 0.16s ease, transform 0.16s ease;
+        white-space: nowrap;
+      }
+      .copy-toast-bubble.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+      }
+    </style>
   </head>
   <body>
     <header class="topbar">
@@ -187,8 +211,7 @@
           }
         }
 
-        function showCopiedToast(anchorEl) {
-          if (!anchorEl) return;
+        function showCopiedToast() {
           if (!copyToastEl) {
             copyToastEl = document.createElement("div");
             copyToastEl.className = "copy-toast-bubble";
@@ -196,14 +219,10 @@
             document.body.appendChild(copyToastEl);
           }
           copyToastEl.textContent = "已复制";
-          const rect = anchorEl.getBoundingClientRect();
-          copyToastEl.style.left = `${rect.left + rect.width / 2}px`;
-          copyToastEl.style.top = `${Math.max(12, rect.top - 12)}px`;
           copyToastEl.classList.remove("is-visible");
+          void copyToastEl.offsetWidth;
+          copyToastEl.classList.add("is-visible");
           if (copyToastTimer) window.clearTimeout(copyToastTimer);
-          window.requestAnimationFrame(() => {
-            copyToastEl?.classList.add("is-visible");
-          });
           copyToastTimer = window.setTimeout(() => {
             copyToastEl?.classList.remove("is-visible");
           }, 1000);
@@ -225,8 +244,7 @@
               const text = buildInstruction(spec, viewer.name || sessionStorage.getItem(USER_NAME_KEY) || "");
               const copied = await copyText(text);
               if (!copied) throw new Error("copy_failed");
-              showCopiedToast(btn);
-              setStatus(`已复制“${skillName}”的安装指令，直接发给龙虾就行。`, true);
+              showCopiedToast();
             } catch (e) {
               setStatus(`复制“${skillName}”失败，请稍后重试。`, false);
             }
