@@ -78,7 +78,7 @@
             <div class="panel-hint">把复制出来的那串指令发给龙虾；它会先读取安装说明，再完成安装。</div>
           </div>
         </div>
-        <div class="panel-status" id="skills-copy-status">找到合适的 Skill 后，点“复制去发给龙虾”即可；未登录时会提示先登录。</div>
+        <div class="panel-status is-hidden" id="skills-copy-status"></div>
       </section>
 
       <section class="skills-grid">
@@ -117,8 +117,10 @@
         if (!buttons.length || !statusEl) return;
 
         function setStatus(text, ok = true) {
-          statusEl.textContent = text;
-          statusEl.classList.toggle("error", !ok);
+          const value = String(text || "").trim();
+          statusEl.textContent = value;
+          statusEl.classList.toggle("error", !ok && Boolean(value));
+          statusEl.classList.toggle("is-hidden", !value);
         }
 
         async function validateLogin() {
@@ -139,7 +141,7 @@
           if (viewer) {
             setStatus("已登录后，可直接复制发给龙虾的安装指令。", true);
           } else {
-            setStatus("找到合适的 Skill 后，点“复制去发给龙虾”即可；未登录时会提示先登录。", true);
+            setStatus("");
           }
           return viewer;
         }
