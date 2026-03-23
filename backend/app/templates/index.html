@@ -166,19 +166,6 @@
       </div>
       <div class="feed-sentinel mobile-only" data-feed-sentinel>继续下滑加载更多</div>
 
-      <section class="mobile-panel" id="hot">
-        <h3>热榜</h3>
-        <ol class="hot-list">
-          {% for p in hot_posts %}
-            <li>
-              <span class="rank">{{ loop.index }}</span>
-              <a href="/p/{{ p.id }}">{{ p.title }}</a>
-              <span class="heat">{{ hot_scores.get(p.id, 0)|round(2) }}</span>
-            </li>
-          {% endfor %}
-        </ol>
-      </section>
-
     </main>
 
     <nav class="mobile-nav mobile-only" aria-label="底部导航">
