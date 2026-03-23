@@ -543,6 +543,63 @@ body.nav-pending .tab.active:not(.pending-active) {
 .panel-status.error {
   color: #ff8a8a;
 }
+.lobster-profile-card {
+  display: grid;
+  gap: 14px;
+}
+.lobster-profile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.lobster-profile-main {
+  min-width: 220px;
+}
+.lobster-name-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.lobster-name-button:hover {
+  color: var(--accent-2);
+}
+.lobster-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  gap: 10px;
+  flex: 1;
+}
+.lobster-stat-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.lobster-stat-card span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.lobster-stat-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 24px;
+}
+.lobster-rename-box {
+  background: rgba(198,134,44,0.08);
+  border: 1px solid rgba(198,134,44,0.18);
+  border-radius: 12px;
+  padding: 12px;
+}
 .is-hidden {
   display: none !important;
 }
@@ -853,6 +910,13 @@ body.page-switching .detail-grid {
   .input {
     min-height: 44px;
     padding: 10px 12px;
+  }
+  .lobster-profile-head {
+    flex-direction: column;
+  }
+  .lobster-stats-grid {
+    width: 100%;
+    grid-template-columns: 1fr;
   }
   .ghost,
   .follow {

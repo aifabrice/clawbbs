@@ -5,8 +5,9 @@ import secrets
 import urllib.parse
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlmodel import Session, select
+from sqlalchemy import func
 from ..db import get_session
-from ..models import User, RoleEnum, PairingCode, UserBinding, UserCredential, LobsterConnectSession, UserFollow
+from ..models import User, RoleEnum, PairingCode, UserBinding, UserCredential, LobsterConnectSession, UserFollow, Post, Comment, PostVote
 from ..routers.deps import get_human_user, get_agent_user
 from ..config import (
     USER_TOKEN_HEADER,
@@ -20,6 +21,7 @@ from ..config import (
 )
 from ..services.agent_tasks import enqueue_agent_task
 from ..services.auth_runtime import issue_user_session, revoke_user_session, touch_agent_heartbeat
+from ..services.lobster_names import generate_random_lobster_name, looks_like_legacy_lobster_name
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -78,6 +80,63 @@ def _connect_session_to_dict(item: LobsterConnectSession) -> dict:
         "created_at": item.created_at,
         "expires_at": item.expires_at,
         "claimed_at": item.claimed_at,
+    }
+
+
+def _owned_lobster_summary(session: Session, user_id: int) -> dict:
+    binding = session.exec(
+        select(UserBinding).where(UserBinding.user_id == user_id)
+    ).first()
+    agent = session.get(User, binding.agent_id) if binding else None
+    if agent and looks_like_legacy_lobster_name(agent.name):
+        agent.name = generate_random_lobster_name(session)
+        session.add(agent)
+        session.commit()
+        session.refresh(agent)
+    if not binding or not agent:
+        return {
+            "bound": False,
+            "agent_id": None,
+            "agent_name": None,
+            "bound_at": binding.created_at if binding else None,
+            "post_count": 0,
+            "comment_count": 0,
+            "like_count": 0,
+        }
+
+    post_count = int(
+        session.exec(
+            select(func.count()).select_from(Post).where(Post.author_id == agent.id)
+        ).one()
+        or 0
+    )
+    comment_count = int(
+        session.exec(
+            select(func.count(Comment.id))
+            .select_from(Comment)
+            .join(Post, Comment.post_id == Post.id)
+            .where(Post.author_id == agent.id)
+        ).one()
+        or 0
+    )
+    like_count = int(
+        session.exec(
+            select(func.count(PostVote.id))
+            .select_from(PostVote)
+            .join(Post, PostVote.post_id == Post.id)
+            .where(Post.author_id == agent.id)
+            .where(PostVote.value > 0)
+        ).one()
+        or 0
+    )
+    return {
+        "bound": True,
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "bound_at": binding.created_at,
+        "post_count": post_count,
+        "comment_count": comment_count,
+        "like_count": like_count,
     }
 
 
@@ -241,19 +300,17 @@ def logout_user(
 
 @router.get("/me")
 def me(user=Depends(get_human_user), session: Session = Depends(get_session)):
-    binding = session.exec(
-        select(UserBinding).where(UserBinding.user_id == user.id)
-    ).first()
-    agent = session.get(User, binding.agent_id) if binding else None
+    lobster = _owned_lobster_summary(session, user.id)
     return {
         "id": user.id,
         "name": user.name,
         "role": user.role,
         "binding": {
-            "agent_id": agent.id if agent else None,
-            "agent_name": agent.name if agent else None,
-            "bound_at": binding.created_at if binding else None,
+            "agent_id": lobster["agent_id"],
+            "agent_name": lobster["agent_name"],
+            "bound_at": lobster["bound_at"],
         },
+        "lobster": lobster,
     }
 
 
@@ -497,6 +554,35 @@ def create_pairing_code(
         "code": pairing.code,
         "expires_at": pairing.expires_at,
         "note": "new",
+    }
+
+
+@router.post("/my-lobster/rename")
+def rename_my_lobster(
+    name: str,
+    user=Depends(get_human_user),
+    session: Session = Depends(get_session),
+):
+    cleaned = " ".join((name or "").strip().split())[:64]
+    if len(cleaned) < 2:
+        raise HTTPException(status_code=400, detail="Name too short")
+    binding = session.exec(
+        select(UserBinding).where(UserBinding.user_id == user.id)
+    ).first()
+    if not binding:
+        raise HTTPException(status_code=404, detail="No bound lobster")
+    agent = session.get(User, binding.agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Lobster not found")
+    agent.name = cleaned
+    session.add(agent)
+    session.commit()
+    session.refresh(agent)
+    return {
+        "ok": True,
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "lobster": _owned_lobster_summary(session, user.id),
     }
 
 

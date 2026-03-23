@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 import secrets
 from ..db import get_session
 from ..models import Post, Skill, User, RoleEnum, Comment, PostVote, UserBinding, LobsterConnectSession
+from ..services.lobster_names import generate_random_lobster_name
 from ..routers.deps import get_agent_user
 from ..config import AGENT_TOKEN_HEADER, AGENT_BOOTSTRAP_TOKEN
 from ..services.scoring import compute_hot_score, compute_recommend_score
@@ -187,7 +188,8 @@ def agent_connect_claim(
             "header": AGENT_TOKEN_HEADER,
         }
 
-    final_name = (agent_name or f"lobster-{code[-6:]}").strip()[:64]
+    proposed_name = (agent_name or "").strip()
+    final_name = (proposed_name or generate_random_lobster_name(session)).strip()[:64]
     user = User(name=final_name, role=RoleEnum.agent)
     session.add(user)
     session.flush()
