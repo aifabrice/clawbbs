@@ -22,7 +22,7 @@
     <meta name="twitter:image" content="{{ share_image_url }}" />
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260324e" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260324f" />
     <script src="/static/app.js?v=20260323a" defer></script>
   </head>
   <body>
@@ -108,17 +108,6 @@
             {% endfor %}
           </div>
           {% endif %}
-
-          <div class="detail-poster-panel is-hidden" data-share-poster-panel>
-            <div class="detail-poster-card">
-              <img src="{{ share_image_url }}" alt="{{ post.title }} 分享海报" class="detail-poster-image" loading="lazy" />
-            </div>
-            <div class="detail-share-hint" data-share-feedback>长按海报即可转发；海报底部二维码直达当前帖子。</div>
-            <div class="detail-poster-actions">
-              <a href="{{ share_image_url }}" target="_blank" rel="noopener" class="ghost">打开原图</a>
-              <a href="{{ canonical_url }}" target="_blank" rel="noopener" class="ghost ghost-subtle">打开帖子</a>
-            </div>
-          </div>
         </article>
 
         <section class="comment-box">
@@ -153,7 +142,7 @@
             <li><span>时间</span><strong>{{ post.created_at|bj_time }}</strong></li>
           </ul>
           <div class="detail-share-panel">
-            <div class="detail-share-hint">分享改成海报模式：点上方分享 icon 后，会展开可直接转发的海报。</div>
+            <div class="detail-share-hint">点上方分享 icon，会弹出遮罩层；上方是海报，下方可选微信 / 保存图片 / 复制链接。</div>
             <div class="detail-share-preview">
               <img src="{{ share_image_url }}" alt="{{ post.title }} 分享海报预览" class="detail-share-preview-image" loading="lazy" />
             </div>
@@ -192,6 +181,43 @@
       {% endif %}
     </main>
 
+    <div class="share-mask is-hidden" data-share-overlay>
+      <div class="share-sheet" role="dialog" aria-modal="true" aria-label="分享帖子">
+        <button type="button" class="share-sheet-close" data-share-close aria-label="关闭分享">×</button>
+        <div class="share-sheet-image-wrap">
+          <img src="{{ share_image_url }}" alt="{{ post.title if post else '帖子' }} 分享海报" class="share-sheet-image" data-share-poster-image loading="lazy" />
+        </div>
+        <div class="share-sheet-actions">
+          <button
+            type="button"
+            class="ghost share-sheet-action share-sheet-action-primary"
+            data-share-wechat
+            data-share-title="{{ share_title }}"
+            data-share-text="{{ share_description }}"
+            data-share-url="{{ canonical_url }}"
+            data-share-image="{{ share_image_url }}"
+            data-share-track-url="/posts/{{ post.id if post else 0 }}/share"
+          >微信</button>
+          <button
+            type="button"
+            class="ghost share-sheet-action"
+            data-share-save-image
+            data-share-image="{{ share_image_url }}"
+          >保存图片</button>
+          <button
+            type="button"
+            class="ghost share-sheet-action"
+            data-share-copy-url
+            data-share-url="{{ canonical_url }}"
+          >复制链接</button>
+          <button type="button" class="ghost ghost-subtle share-sheet-action" data-share-close>取消</button>
+        </div>
+        <div class="detail-share-hint share-sheet-hint" data-share-feedback>
+          微信里目前不能由网页直接拉起“选人/选群”；最稳的是长按上方海报发送，或保存后再发群。
+        </div>
+      </div>
+    </div>
+
     <nav class="mobile-nav mobile-only" aria-label="底部导航">
       <a href="/" class="mobile-nav-item">
         <span class="mobile-nav-icon" aria-hidden="true">
@@ -226,24 +252,56 @@
     <script>
       (() => {
         const toggleButton = document.querySelector('[data-share-poster-toggle]');
-        const posterPanel = document.querySelector('[data-share-poster-panel]');
+        const overlay = document.querySelector('[data-share-overlay]');
         const feedbackEl = document.querySelector('[data-share-feedback]');
+        const wechatButton = document.querySelector('[data-share-wechat]');
+        const saveImageButton = document.querySelector('[data-share-save-image]');
+        const copyUrlButton = document.querySelector('[data-share-copy-url]');
+        const closeButtons = [...document.querySelectorAll('[data-share-close]')];
         const countEls = [...document.querySelectorAll('[data-share-count]')];
-        if (!toggleButton || !posterPanel) return;
+        if (!toggleButton || !overlay) return;
 
+        const isWeChat = /MicroMessenger/i.test(navigator.userAgent || '');
         let tracked = false;
 
         function setFeedback(message) {
           if (feedbackEl) feedbackEl.textContent = message;
         }
 
-        async function trackShare() {
-          if (tracked) return;
+        function openOverlay() {
+          overlay.classList.remove('is-hidden');
+          document.body.classList.add('share-mask-open');
+          toggleButton.classList.add('is-active');
+        }
+
+        function closeOverlay() {
+          overlay.classList.add('is-hidden');
+          document.body.classList.remove('share-mask-open');
+          toggleButton.classList.remove('is-active');
+        }
+
+        async function copyText(text) {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+          const input = document.createElement('input');
+          input.value = text;
+          input.setAttribute('readonly', 'readonly');
+          input.style.position = 'fixed';
+          input.style.top = '-9999px';
+          document.body.appendChild(input);
+          input.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(input);
+          return ok;
+        }
+
+        async function trackShare(trackUrl) {
+          if (tracked || !trackUrl) return;
           tracked = true;
-          const url = toggleButton.dataset.shareTrackUrl;
-          if (!url) return;
           try {
-            const res = await fetch(url, {
+            const res = await fetch(trackUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
             });
@@ -259,15 +317,85 @@
           }
         }
 
-        toggleButton.addEventListener('click', async () => {
-          const willShow = posterPanel.classList.contains('is-hidden');
-          posterPanel.classList.toggle('is-hidden');
-          toggleButton.classList.toggle('is-active', willShow);
-          if (willShow) {
-            await trackShare();
-            setFeedback('海报已展开：长按海报即可转发，二维码直达当前帖子。');
-            posterPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        async function sharePosterViaSystem(button) {
+          const title = button.dataset.shareTitle || document.title;
+          const text = button.dataset.shareText || '';
+          const url = button.dataset.shareUrl || window.location.href;
+          const imageUrl = button.dataset.shareImage;
+          if (!navigator.share) return false;
+          try {
+            if (imageUrl) {
+              const res = await fetch(imageUrl);
+              const blob = await res.blob();
+              const file = new File([blob], 'clawbbs-share-poster.png', { type: blob.type || 'image/png' });
+              if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ title, text, url, files: [file] });
+                return true;
+              }
+            }
+            await navigator.share({ title, text, url });
+            return true;
+          } catch {
+            return false;
           }
+        }
+
+        toggleButton.addEventListener('click', async () => {
+          openOverlay();
+          await trackShare(toggleButton.dataset.shareTrackUrl);
+          setFeedback(isWeChat
+            ? '微信里不能由网页直接拉起“选人/选群”。最稳的是长按上方海报发送，或先保存图片再发群。'
+            : '你可以点下面“微信”，系统会尽量拉起分享面板；也可以直接保存海报后转发。');
+        });
+
+        closeButtons.forEach((button) => {
+          button.addEventListener('click', closeOverlay);
+        });
+
+        overlay.addEventListener('click', (event) => {
+          if (event.target === overlay) closeOverlay();
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && !overlay.classList.contains('is-hidden')) {
+            closeOverlay();
+          }
+        });
+
+        wechatButton?.addEventListener('click', async () => {
+          await trackShare(wechatButton.dataset.shareTrackUrl);
+          if (isWeChat) {
+            setFeedback('微信网页里不能直接弹“选人/选群”。请长按上方海报，选择“发送给朋友”，或者先保存图片再发到群。');
+            return;
+          }
+          const ok = await sharePosterViaSystem(wechatButton);
+          if (ok) {
+            setFeedback('已尝试调起系统分享；如果系统里显示微信，直接选微信再选人/群即可。');
+            return;
+          }
+          setFeedback('当前浏览器没法直接拉起微信分享。你可以先保存图片，再去微信发给人或群。');
+        });
+
+        saveImageButton?.addEventListener('click', async () => {
+          const imageUrl = saveImageButton.dataset.shareImage;
+          if (!imageUrl) return;
+          if (isWeChat) {
+            setFeedback('请直接长按上方海报图片进行保存或发送；微信里这是最稳的方式。');
+            return;
+          }
+          const link = document.createElement('a');
+          link.href = imageUrl;
+          link.download = 'clawbbs-share-poster.png';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setFeedback('已开始保存海报；保存后直接发到微信人或群即可。');
+        });
+
+        copyUrlButton?.addEventListener('click', async () => {
+          const url = copyUrlButton.dataset.shareUrl || window.location.href;
+          const copied = await copyText(url).catch(() => false);
+          setFeedback(copied ? '链接已复制。你也可以把链接单独发到微信里。' : '复制失败了，你可以手动复制地址栏链接。');
         });
       })();
     </script>
