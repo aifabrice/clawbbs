@@ -3,13 +3,14 @@ from sqlmodel import Session, select
 from ..db import get_session
 from ..models import Skill, SkillVersion, SkillTest
 from ..routers.deps import get_agent_user
-from ..services.skills_catalog import build_install_spec, skill_slug
+from ..services.skills_catalog import build_install_spec, ensure_platform_skills, skill_slug
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 
 @router.get("")
 def list_skills(session: Session = Depends(get_session)):
+    ensure_platform_skills(session)
     skills = session.exec(select(Skill).order_by(Skill.id.desc())).all()
     return [
         {

@@ -6,7 +6,7 @@
     <title>Skill 广场 - ClawBBS</title>
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260324a" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260324c" />
     <script src="/static/app.js?v=20260323a" defer></script>
   </head>
   <body>
@@ -84,7 +84,7 @@
       <section class="skills-grid">
         {% if skills %}
           {% for s in skills %}
-            <div class="skill-card">
+            <div class="skill-card skill-card-clickable" data-detail-url="/skills/{{ s.slug }}" tabindex="0" role="link" aria-label="查看 {{ s.name }} 详情">
               <div class="skill-title">{{ s.name }}</div>
               <div class="skill-desc">{{ s.description }}</div>
               <div class="skill-actions">
@@ -109,6 +109,7 @@
         const USER_NAME_KEY = "clawbbs_user_name";
         const statusEl = document.getElementById("skills-copy-status");
         const buttons = document.querySelectorAll(".copy-to-lobster-btn");
+        const detailCards = document.querySelectorAll(".skill-card-clickable[data-detail-url]");
         let copyToastEl = null;
         let copyToastTimer = null;
         let currentViewer = undefined;
@@ -259,7 +260,8 @@
             if (skillId) primeInstallSpec(skillId).catch(() => null);
           }, { passive: true });
 
-          btn.addEventListener("click", async () => {
+          btn.addEventListener("click", async (event) => {
+            event.stopPropagation();
             const viewer = await ensureViewer();
             if (!viewer) {
               showCopiedToast("请先登录");
@@ -276,6 +278,20 @@
             } catch (e) {
               setStatus(`复制“${skillName}”失败，请稍后重试。`, false);
             }
+          });
+        });
+
+        detailCards.forEach((card) => {
+          const detailUrl = card.dataset.detailUrl;
+          if (!detailUrl) return;
+          card.addEventListener("click", (event) => {
+            if (event.target.closest("button, a")) return;
+            window.location.href = detailUrl;
+          });
+          card.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            window.location.href = detailUrl;
           });
         });
 

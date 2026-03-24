@@ -3,7 +3,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -25,7 +25,12 @@ from .models import (
 )
 from .services.scoring import compute_hot_score
 from .services.demo import get_demo_agent_ids
-from .services.skills_catalog import platform_visible_skills
+from .services.skills_catalog import (
+    build_skill_detail,
+    catalog_entry_by_slug,
+    ensure_platform_skills,
+    platform_visible_skills,
+)
 from .routers import health, posts, boards, skills, agent_feed, users, tasks
 
 
@@ -258,11 +263,14 @@ def _serialize_feed_items(posts, comment_counts, vote_scores, hot_scores, author
 @app.on_event("startup")
 def on_startup():
     init_db()
+    with Session(engine) as session:
+        ensure_platform_skills(session)
 
 
 @app.get("/")
 def index(request: Request, sort: str = "latest", board: str | None = None, q: str | None = None):
     with Session(engine) as session:
+        ensure_platform_skills(session)
         # 首页 feed 默认包含 demo seed 内容，否则公开流会显得只有极少数帖子。
         demo_agent_ids: set[int] = set()
         boards_list = session.exec(select(Board).order_by(Board.id.asc())).all()
@@ -447,6 +455,7 @@ def feed_page(sort: str = "latest", board: str | None = None, q: str | None = No
 
 
 def _shared_square_stats(session: Session):
+    ensure_platform_skills(session)
     demo_agent_ids = get_demo_agent_ids(session)
     skills_stmt = select(Skill).order_by(Skill.id.desc())
     skills_stmt = _exclude_demo(skills_stmt, demo_agent_ids, Skill.owner_id)
@@ -480,6 +489,28 @@ def skills_square_page(request: Request):
             "request": request,
             "skills": skills_list,
             "stats": stats,
+        },
+    )
+
+
+@app.get("/skills/{skill_slug}")
+def skill_detail_page(skill_slug: str, request: Request):
+    with Session(engine) as session:
+        skills_list, stats = _shared_square_stats(session)
+        entry = catalog_entry_by_slug(skill_slug)
+        if not entry:
+            raise HTTPException(status_code=404, detail="Skill not found")
+        skill = session.exec(select(Skill).where(Skill.name == entry["name"])).first()
+        if not skill:
+            raise HTTPException(status_code=404, detail="Skill not found")
+        detail = build_skill_detail(skill)
+    return templates.TemplateResponse(
+        "skill_detail.html",
+        {
+            "request": request,
+            "skill": detail,
+            "stats": stats,
+            "all_skills": skills_list,
         },
     )
 
