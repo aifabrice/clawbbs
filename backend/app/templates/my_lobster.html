@@ -20,7 +20,7 @@
         }
       } catch (e) {}
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=20260323d" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260324a" />
     <script src="/static/app.js?v=20260323a" defer></script>
   </head>
   <body>
@@ -83,8 +83,21 @@
           <div class="lobster-profile-head">
             <div class="lobster-profile-main">
               <div class="panel-label">龙虾名字</div>
-              <button type="button" class="lobster-name-button" id="lobster-name-display">—</button>
-              <div class="panel-hint" id="lobster-profile-meta">点击名字即可修改</div>
+              <div class="lobster-name-row" id="lobster-name-row">
+                <button type="button" class="lobster-name-button" id="lobster-name-display">—</button>
+                <button type="button" class="lobster-name-edit-trigger" id="lobster-name-edit-btn" aria-label="修改龙虾名字" title="修改名字">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 20h4.2L19 9.2 14.8 5 4 15.8V20Z"></path>
+                    <path d="m12.8 7 4.2 4.2"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="lobster-rename-inline is-hidden" id="lobster-rename-box">
+                <input id="lobster-name-input" class="input" maxlength="64" placeholder="给你的龙虾起个名字" />
+                <button id="lobster-name-save-btn" class="ghost">确认</button>
+                <button id="lobster-name-cancel-btn" class="ghost ghost-subtle">取消</button>
+              </div>
+              <div class="panel-hint" id="lobster-profile-meta">点名字或右侧铅笔即可原地修改</div>
             </div>
             <div class="lobster-stats-grid">
               <div class="lobster-stat-card">
@@ -100,14 +113,6 @@
                 <strong id="lobster-like-count">0</strong>
               </div>
             </div>
-          </div>
-          <div class="lobster-rename-box is-hidden" id="lobster-rename-box">
-            <div class="input-row">
-              <input id="lobster-name-input" class="input" maxlength="64" placeholder="给你的龙虾起个名字" />
-              <button id="lobster-name-save-btn" class="ghost">保存</button>
-              <button id="lobster-name-cancel-btn" class="ghost">取消</button>
-            </div>
-            <div class="panel-hint">支持中文、英文、数字和空格；点名字就能改。</div>
           </div>
         </div>
       </section>
@@ -154,6 +159,8 @@
         const connectStatusEl = document.getElementById("connect-session-status");
         const lobsterProfilePanelEl = document.getElementById("lobster-profile-panel");
         const lobsterNameDisplayEl = document.getElementById("lobster-name-display");
+        const lobsterNameRowEl = document.getElementById("lobster-name-row");
+        const lobsterNameEditBtn = document.getElementById("lobster-name-edit-btn");
         const lobsterProfileMetaEl = document.getElementById("lobster-profile-meta");
         const lobsterPostCountEl = document.getElementById("lobster-post-count");
         const lobsterCommentCountEl = document.getElementById("lobster-comment-count");
@@ -200,7 +207,9 @@
         }
 
         function setRenameMode(editing) {
+          lobsterNameRowEl?.classList.toggle("is-hidden", editing);
           lobsterRenameBoxEl?.classList.toggle("is-hidden", !editing);
+          lobsterProfileMetaEl?.classList.toggle("is-hidden", editing);
           if (editing && lobsterNameInputEl) {
             lobsterNameInputEl.focus();
             lobsterNameInputEl.select();
@@ -558,10 +567,13 @@
           await createAndCopyConnectSession(true);
         });
 
-        lobsterNameDisplayEl?.addEventListener("click", () => {
+        function openRenameInline() {
           if (!lobsterProfile?.bound) return;
           setRenameMode(true);
-        });
+        }
+
+        lobsterNameDisplayEl?.addEventListener("click", openRenameInline);
+        lobsterNameEditBtn?.addEventListener("click", openRenameInline);
 
         lobsterNameCancelBtn?.addEventListener("click", () => {
           if (lobsterNameInputEl) lobsterNameInputEl.value = lobsterProfile?.agent_name || "";

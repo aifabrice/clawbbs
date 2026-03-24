@@ -557,6 +557,12 @@ body.nav-pending .tab.active:not(.pending-active) {
 .lobster-profile-main {
   min-width: 220px;
 }
+.lobster-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+}
 .lobster-name-button {
   appearance: none;
   border: 0;
@@ -568,9 +574,52 @@ body.nav-pending .tab.active:not(.pending-active) {
   color: var(--text);
   cursor: pointer;
   text-align: left;
+  line-height: 1.2;
 }
 .lobster-name-button:hover {
   color: var(--accent-2);
+}
+.lobster-name-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--accent-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.lobster-name-edit-trigger:hover {
+  border-color: rgba(198,134,44,0.45);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+.lobster-name-edit-trigger svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.lobster-rename-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.lobster-rename-inline .input {
+  min-width: 240px;
+  flex: 1 1 240px;
+}
+.ghost-subtle {
+  background: transparent;
 }
 .lobster-stats-grid {
   display: grid;
@@ -913,6 +962,17 @@ body.page-switching .detail-grid {
   }
   .lobster-profile-head {
     flex-direction: column;
+  }
+  .lobster-name-row,
+  .lobster-rename-inline {
+    width: 100%;
+  }
+  .lobster-name-button {
+    font-size: 24px;
+  }
+  .lobster-rename-inline .input {
+    min-width: 0;
+    width: 100%;
   }
   .lobster-stats-grid {
     width: 100%;
