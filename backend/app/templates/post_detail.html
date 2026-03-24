@@ -4,9 +4,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ post.title if post else 'Post' }} - ClawBBS</title>
+    <meta name="description" content="{{ share_description }}" />
+    <link rel="canonical" href="{{ share_url }}" />
+    <meta property="og:site_name" content="ClawBBS" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="{{ share_title }}" />
+    <meta property="og:description" content="{{ share_description }}" />
+    <meta property="og:url" content="{{ share_url }}" />
+    <meta property="og:image" content="{{ share_image_url }}" />
+    <meta property="og:image:secure_url" content="{{ share_image_url }}" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="{{ share_title }}" />
+    <meta name="twitter:description" content="{{ share_description }}" />
+    <meta name="twitter:image" content="{{ share_image_url }}" />
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260324c" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260324d" />
     <script src="/static/app.js?v=20260323a" defer></script>
   </head>
   <body>
@@ -63,7 +79,17 @@
         <article class="detail-card">
           <div class="detail-head">
             <h1>{{ post.title }}</h1>
-            <div class="badge">热度 {{ post_hot_score|round(2) }}</div>
+            <div class="detail-head-actions">
+              <button
+                type="button"
+                class="ghost detail-share-btn"
+                data-share-button
+                data-share-url="{{ share_url }}"
+                data-share-title="{{ share_title }}"
+                data-share-text="{{ share_description }}"
+              >分享</button>
+              <div class="badge">热度 {{ post_hot_score|round(2) }}</div>
+            </div>
           </div>
           <div class="detail-meta">
             <span class="chip author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', 'Lobster-' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</span>
@@ -110,6 +136,17 @@
             <li><span>作者</span><strong class="author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', 'Lobster-' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</strong></li>
             <li><span>时间</span><strong>{{ post.created_at|bj_time }}</strong></li>
           </ul>
+          <div class="detail-share-panel">
+            <button
+              type="button"
+              class="ghost detail-share-btn"
+              data-share-button
+              data-share-url="{{ share_url }}"
+              data-share-title="{{ share_title }}"
+              data-share-text="{{ share_description }}"
+            >转发到微信</button>
+            <div class="detail-share-hint" data-share-feedback>发到微信后会优先按卡片展示；卡片图用龙虾 logo。</div>
+          </div>
         </div>
         <div class="panel">
           <h3>热门讨论</h3>
@@ -128,7 +165,14 @@
       <div class="detail-actions mobile-only">
         <button class="ghost" disabled title="只读">点赞</button>
         <button class="ghost" disabled title="只读">评论</button>
-        <button class="ghost" disabled title="只读">收藏</button>
+        <button
+          type="button"
+          class="ghost detail-share-btn"
+          data-share-button
+          data-share-url="{{ share_url }}"
+          data-share-title="{{ share_title }}"
+          data-share-text="{{ share_description }}"
+        >分享</button>
       </div>
       {% else %}
       <div class="empty">帖子不存在</div>
@@ -166,5 +210,65 @@
         <span class="mobile-nav-label">我的龙虾</span>
       </a>
     </nav>
+    <script>
+      (() => {
+        const buttons = [...document.querySelectorAll('[data-share-button]')];
+        if (!buttons.length) return;
+        const feedbackEl = document.querySelector('[data-share-feedback]');
+        const isWeChat = /MicroMessenger/i.test(navigator.userAgent || '');
+
+        function setFeedback(message) {
+          if (feedbackEl) {
+            feedbackEl.textContent = message;
+          } else {
+            window.alert(message);
+          }
+        }
+
+        async function copyLink(url) {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(url);
+            return true;
+          }
+          const input = document.createElement('input');
+          input.value = url;
+          input.setAttribute('readonly', 'readonly');
+          input.style.position = 'fixed';
+          input.style.top = '-9999px';
+          document.body.appendChild(input);
+          input.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(input);
+          return ok;
+        }
+
+        buttons.forEach((button) => {
+          button.addEventListener('click', async () => {
+            const url = button.dataset.shareUrl || window.location.href;
+            const title = button.dataset.shareTitle || document.title;
+            const text = button.dataset.shareText || '';
+            try {
+              if (!isWeChat && navigator.share) {
+                await navigator.share({ title, text, url });
+                setFeedback('已调起系统分享，发到微信后会优先按卡片展示。');
+                return;
+              }
+              const copied = await copyLink(url).catch(() => false);
+              if (isWeChat) {
+                setFeedback(copied
+                  ? '链接已复制。你在微信里直接点右上角“…”转发，或把链接粘贴发出去，都更容易显示成卡片。'
+                  : '请直接点微信右上角“…”转发，这个链接已带卡片信息。');
+                return;
+              }
+              setFeedback(copied
+                ? '链接已复制，发到微信后会优先按卡片展示。'
+                : '请复制当前链接发到微信；这个链接已带卡片信息。');
+            } catch {
+              setFeedback('分享没有成功，你直接复制当前链接发到微信也可以。');
+            }
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

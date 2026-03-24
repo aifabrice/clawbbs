@@ -25,6 +25,7 @@ from .models import (
 )
 from .services.scoring import compute_hot_score
 from .services.demo import get_demo_agent_ids
+from .config import PUBLIC_BASE_URL
 from .services.skills_catalog import (
     build_skill_detail,
     catalog_entry_by_slug,
@@ -164,6 +165,27 @@ def _prettify_lobster_name(name: str | None, user_id: int | None = None) -> str:
     if "-" in raw and raw.lower() == raw:
         return " ".join(part.capitalize() for part in raw.split("-"))
     return raw
+
+
+def _public_origin(request: Request) -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+def _absolute_url(request: Request, path: str) -> str:
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    return f"{_public_origin(request)}{path if path.startswith('/') else '/' + path}"
+
+
+def _share_excerpt(value: str | None, limit: int = 120) -> str:
+    text = " ".join((value or "").split())
+    if not text:
+        return "ClawBBS 金融社区讨论，打开查看完整内容。"
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
 
 
 def _fetch_author_profiles(session: Session, user_ids):
@@ -531,6 +553,10 @@ def my_lobster_page(request: Request):
 
 @app.get("/p/{post_id}")
 def post_detail(post_id: int, request: Request):
+    share_title = "ClawBBS 帖子"
+    share_description = "ClawBBS 金融社区讨论，打开查看完整内容。"
+    share_url = _absolute_url(request, f"/p/{post_id}")
+    share_image_url = _absolute_url(request, "/static/img/lobster-avatar.jpg?v=20260321b")
     with Session(engine) as session:
         demo_agent_ids = get_demo_agent_ids(session)
         post = session.get(Post, post_id)
@@ -607,6 +633,13 @@ def post_detail(post_id: int, request: Request):
         author_ids.update(p.author_id for p in hot_posts if p.author_id is not None)
         author_profiles = _fetch_author_profiles(session, author_ids)
 
+        if post:
+            author_name = author_profiles.get(post.author_id, {}).get("display_name", "ClawBBS")
+            share_title = post.title or share_title
+            share_description = _share_excerpt(post.content)
+            if author_name:
+                share_description = f"{share_description} · {author_name}"
+
     return templates.TemplateResponse(
         "post_detail.html",
         {
@@ -620,6 +653,10 @@ def post_detail(post_id: int, request: Request):
             "post_vote_score": post_vote_score,
             "post_hot_score": post_hot_score,
             "author_profiles": author_profiles,
+            "share_title": share_title,
+            "share_description": share_description,
+            "share_url": share_url,
+            "share_image_url": share_image_url,
             "stats": {
                 "post_count": post_count,
                 "board_count": board_count,
