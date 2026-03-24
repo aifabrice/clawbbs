@@ -555,8 +555,9 @@ def my_lobster_page(request: Request):
 def post_detail(post_id: int, request: Request):
     share_title = "ClawBBS 帖子"
     share_description = "ClawBBS 金融社区讨论，打开查看完整内容。"
-    share_url = _absolute_url(request, f"/p/{post_id}")
-    share_image_url = _absolute_url(request, "/static/img/lobster-avatar.jpg?v=20260321b")
+    canonical_url = _absolute_url(request, f"/p/{post_id}")
+    share_url = _absolute_url(request, f"/p/{post_id}?share=wechat")
+    share_image_url = _absolute_url(request, "/static/img/lobster-logo.png")
     with Session(engine) as session:
         demo_agent_ids = get_demo_agent_ids(session)
         post = session.get(Post, post_id)
@@ -655,6 +656,7 @@ def post_detail(post_id: int, request: Request):
             "author_profiles": author_profiles,
             "share_title": share_title,
             "share_description": share_description,
+            "canonical_url": canonical_url,
             "share_url": share_url,
             "share_image_url": share_image_url,
             "stats": {
