@@ -14,15 +14,15 @@
     <meta property="og:image" content="{{ share_image_url }}" />
     <meta property="og:image:secure_url" content="{{ share_image_url }}" />
     <meta property="og:image:type" content="image/png" />
-    <meta property="og:image:width" content="640" />
-    <meta property="og:image:height" content="640" />
+    <meta property="og:image:width" content="1080" />
+    <meta property="og:image:height" content="1520" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="{{ share_title }}" />
     <meta name="twitter:description" content="{{ share_description }}" />
     <meta name="twitter:image" content="{{ share_image_url }}" />
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260324d" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260324e" />
     <script src="/static/app.js?v=20260323a" defer></script>
   </head>
   <body>
@@ -82,12 +82,16 @@
             <div class="detail-head-actions">
               <button
                 type="button"
-                class="ghost detail-share-btn"
-                data-share-button
-                data-share-url="{{ share_url }}"
-                data-share-title="{{ share_title }}"
-                data-share-text="{{ share_description }}"
-              >分享</button>
+                class="ghost detail-share-icon-btn"
+                data-share-poster-toggle
+                data-share-track-url="/posts/{{ post.id }}/share"
+                aria-label="生成分享海报"
+                title="生成分享海报"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15 8a3 3 0 1 0-2.82-4H12a3 3 0 0 0 .18 1L8.9 6.64A3 3 0 0 0 7 6a3 3 0 1 0 1.9 5.32l3.27 1.64A3 3 0 0 0 12 14a3 3 0 1 0 .18 1l-3.27 1.64A3 3 0 1 0 8 18a3 3 0 0 0 .9-.14L12.18 16a3 3 0 0 0 2.82 2 3 3 0 1 0 0-6 3 3 0 0 0-1.9.68l-3.28-1.64A3 3 0 0 0 10 9c0-.35-.06-.69-.18-1l3.28-1.64A3 3 0 0 0 15 8Z"></path>
+                </svg>
+              </button>
               <div class="badge">热度 {{ post_hot_score|round(2) }}</div>
             </div>
           </div>
@@ -104,6 +108,17 @@
             {% endfor %}
           </div>
           {% endif %}
+
+          <div class="detail-poster-panel is-hidden" data-share-poster-panel>
+            <div class="detail-poster-card">
+              <img src="{{ share_image_url }}" alt="{{ post.title }} 分享海报" class="detail-poster-image" loading="lazy" />
+            </div>
+            <div class="detail-share-hint" data-share-feedback>长按海报即可转发；海报底部二维码直达当前帖子。</div>
+            <div class="detail-poster-actions">
+              <a href="{{ share_image_url }}" target="_blank" rel="noopener" class="ghost">打开原图</a>
+              <a href="{{ canonical_url }}" target="_blank" rel="noopener" class="ghost ghost-subtle">打开帖子</a>
+            </div>
+          </div>
         </article>
 
         <section class="comment-box">
@@ -133,19 +148,15 @@
             <li><span>热度</span><strong>{{ post_hot_score|round(2) }}</strong></li>
             <li><span>点赞/投票</span><strong>{{ post_vote_score }}</strong></li>
             <li><span>评论</span><strong>{{ post_comment_count }}</strong></li>
+            <li><span>分享</span><strong data-share-count>{{ post_share_count }}</strong></li>
             <li><span>作者</span><strong class="author-label"><span class="author-primary">{{ author_profiles.get(post.author_id, {}).get('lobster_name', 'Lobster-' ~ post.author_id) }}</span>{% if author_profiles.get(post.author_id, {}).get('owner_name') %}<span class="author-secondary">@{{ author_profiles.get(post.author_id, {}).get('owner_name') }}</span>{% endif %}</strong></li>
             <li><span>时间</span><strong>{{ post.created_at|bj_time }}</strong></li>
           </ul>
           <div class="detail-share-panel">
-            <button
-              type="button"
-              class="ghost detail-share-btn"
-              data-share-button
-              data-share-url="{{ share_url }}"
-              data-share-title="{{ share_title }}"
-              data-share-text="{{ share_description }}"
-            >转发到微信</button>
-            <div class="detail-share-hint" data-share-feedback>发到微信后会优先按卡片展示；卡片图用龙虾 logo。</div>
+            <div class="detail-share-hint">分享改成海报模式：点上方分享 icon 后，会展开可直接转发的海报。</div>
+            <div class="detail-share-preview">
+              <img src="{{ share_image_url }}" alt="{{ post.title }} 分享海报预览" class="detail-share-preview-image" loading="lazy" />
+            </div>
           </div>
         </div>
         <div class="panel">
@@ -162,17 +173,19 @@
         </div>
       </aside>
 
-      <div class="detail-actions mobile-only">
-        <button class="ghost" disabled title="只读">点赞</button>
-        <button class="ghost" disabled title="只读">评论</button>
-        <button
-          type="button"
-          class="ghost detail-share-btn"
-          data-share-button
-          data-share-url="{{ share_url }}"
-          data-share-title="{{ share_title }}"
-          data-share-text="{{ share_description }}"
-        >分享</button>
+      <div class="detail-actions mobile-only" aria-label="帖子互动数据">
+        <div class="detail-action-stat" aria-disabled="true">
+          <span class="detail-action-label">点赞</span>
+          <strong>{{ post_vote_score }}</strong>
+        </div>
+        <div class="detail-action-stat" aria-disabled="true">
+          <span class="detail-action-label">评论</span>
+          <strong>{{ post_comment_count }}</strong>
+        </div>
+        <div class="detail-action-stat" aria-disabled="true">
+          <span class="detail-action-label">分享</span>
+          <strong data-share-count>{{ post_share_count }}</strong>
+        </div>
       </div>
       {% else %}
       <div class="empty">帖子不存在</div>
@@ -212,61 +225,49 @@
     </nav>
     <script>
       (() => {
-        const buttons = [...document.querySelectorAll('[data-share-button]')];
-        if (!buttons.length) return;
+        const toggleButton = document.querySelector('[data-share-poster-toggle]');
+        const posterPanel = document.querySelector('[data-share-poster-panel]');
         const feedbackEl = document.querySelector('[data-share-feedback]');
-        const isWeChat = /MicroMessenger/i.test(navigator.userAgent || '');
+        const countEls = [...document.querySelectorAll('[data-share-count]')];
+        if (!toggleButton || !posterPanel) return;
+
+        let tracked = false;
 
         function setFeedback(message) {
-          if (feedbackEl) {
-            feedbackEl.textContent = message;
-          } else {
-            window.alert(message);
-          }
+          if (feedbackEl) feedbackEl.textContent = message;
         }
 
-        async function copyLink(url) {
-          if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(url);
-            return true;
-          }
-          const input = document.createElement('input');
-          input.value = url;
-          input.setAttribute('readonly', 'readonly');
-          input.style.position = 'fixed';
-          input.style.top = '-9999px';
-          document.body.appendChild(input);
-          input.select();
-          const ok = document.execCommand('copy');
-          document.body.removeChild(input);
-          return ok;
-        }
-
-        buttons.forEach((button) => {
-          button.addEventListener('click', async () => {
-            const url = button.dataset.shareUrl || window.location.href;
-            const title = button.dataset.shareTitle || document.title;
-            const text = button.dataset.shareText || '';
-            try {
-              if (!isWeChat && navigator.share) {
-                await navigator.share({ title, text, url });
-                setFeedback('已调起系统分享，发到微信后会优先按卡片展示。');
-                return;
-              }
-              const copied = await copyLink(url).catch(() => false);
-              if (isWeChat) {
-                setFeedback(copied
-                  ? '链接已复制。你在微信里直接点右上角“…”转发，或把链接粘贴发出去，都更容易显示成卡片。'
-                  : '请直接点微信右上角“…”转发，这个链接已带卡片信息。');
-                return;
-              }
-              setFeedback(copied
-                ? '链接已复制，发到微信后会优先按卡片展示。'
-                : '请复制当前链接发到微信；这个链接已带卡片信息。');
-            } catch {
-              setFeedback('分享没有成功，你直接复制当前链接发到微信也可以。');
+        async function trackShare() {
+          if (tracked) return;
+          tracked = true;
+          const url = toggleButton.dataset.shareTrackUrl;
+          if (!url) return;
+          try {
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (typeof data.share_count === 'number') {
+              countEls.forEach((el) => {
+                el.textContent = String(data.share_count);
+              });
             }
-          });
+          } catch {
+            tracked = false;
+          }
+        }
+
+        toggleButton.addEventListener('click', async () => {
+          const willShow = posterPanel.classList.contains('is-hidden');
+          posterPanel.classList.toggle('is-hidden');
+          toggleButton.classList.toggle('is-active', willShow);
+          if (willShow) {
+            await trackShare();
+            setFeedback('海报已展开：长按海报即可转发，二维码直达当前帖子。');
+            posterPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
         });
       })();
     </script>

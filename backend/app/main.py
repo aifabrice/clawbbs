@@ -1,12 +1,17 @@
+import io
 import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from PIL import Image, ImageDraw, ImageFont
+from qrcodegen import QrCode
 from sqlmodel import Session, select
 from sqlalchemy import func
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -21,6 +26,7 @@ from .models import (
     UserBinding,
     RoleEnum,
     PostVote,
+    PostShare,
     PlatformAgentProfile,
 )
 from .services.scoring import compute_hot_score
@@ -36,6 +42,21 @@ from .routers import health, posts, boards, skills, agent_feed, users, tasks
 
 
 logger = logging.getLogger("clawbbs.http")
+
+POSTER_WIDTH = 1080
+POSTER_HEIGHT = 1520
+POSTER_BG = "#F7F1E8"
+POSTER_PANEL = "#FFFDF9"
+POSTER_BORDER = "#E8DFD2"
+POSTER_TEXT = "#241B16"
+POSTER_MUTED = "#74665A"
+POSTER_ACCENT = "#C6862C"
+POSTER_FONT_CANDIDATES = [
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+]
+POSTER_LOGO_PATH = Path(__file__).resolve().parent / "static" / "img" / "lobster-logo.png"
 
 
 class StaticCacheMiddleware(BaseHTTPMiddleware):
@@ -186,6 +207,126 @@ def _share_excerpt(value: str | None, limit: int = 120) -> str:
     if len(text) <= limit:
         return text
     return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _poster_font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    for path in POSTER_FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size=size, index=1 if bold else 0)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return int(bbox[2] - bbox[0])
+
+
+def _wrap_lines(draw: ImageDraw.ImageDraw, text: str, font, max_width: int, *, max_lines: int | None = None) -> list[str]:
+    raw = (text or "").strip()
+    if not raw:
+        return []
+    lines: list[str] = []
+    current = ""
+    for ch in raw:
+        candidate = current + ch
+        if current and _text_width(draw, candidate, font) > max_width:
+            lines.append(current)
+            current = ch
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    if max_lines and len(lines) > max_lines:
+        lines = lines[:max_lines]
+        while lines and _text_width(draw, lines[-1] + "…", font) > max_width:
+            lines[-1] = lines[-1][:-1]
+        lines[-1] = lines[-1].rstrip() + "…"
+    return lines
+
+
+def _render_qr_image(text: str, size: int = 280) -> Image.Image:
+    qr = QrCode.encode_text(text, QrCode.Ecc.MEDIUM)
+    border = 4
+    modules = qr.get_size()
+    box = max(4, size // (modules + border * 2))
+    actual = (modules + border * 2) * box
+    image = Image.new("RGB", (actual, actual), "white")
+    draw = ImageDraw.Draw(image)
+    for y in range(modules):
+        for x in range(modules):
+            if qr.get_module(x, y):
+                x0 = (x + border) * box
+                y0 = (y + border) * box
+                draw.rectangle((x0, y0, x0 + box - 1, y0 + box - 1), fill="black")
+    if actual != size:
+        image = image.resize((size, size), Image.Resampling.NEAREST)
+    return image
+
+
+def _render_share_poster(post: Post, *, author_name: str, board_name: str, canonical_url: str, share_description: str) -> bytes:
+    image = Image.new("RGB", (POSTER_WIDTH, POSTER_HEIGHT), POSTER_BG)
+    draw = ImageDraw.Draw(image)
+
+    title_font = _poster_font(64, bold=True)
+    meta_font = _poster_font(30, bold=False)
+    body_font = _poster_font(38, bold=False)
+    small_font = _poster_font(26, bold=False)
+    url_font = _poster_font(24, bold=False)
+
+    draw.rounded_rectangle((48, 48, POSTER_WIDTH - 48, POSTER_HEIGHT - 48), radius=40, fill=POSTER_PANEL, outline=POSTER_BORDER, width=2)
+    draw.rounded_rectangle((72, 72, POSTER_WIDTH - 72, 220), radius=28, fill="#FFF7EA")
+
+    if POSTER_LOGO_PATH.exists():
+        try:
+            logo = Image.open(POSTER_LOGO_PATH).convert("RGBA")
+            logo = logo.resize((140, 140), Image.Resampling.LANCZOS)
+            image.paste(logo, (POSTER_WIDTH - 72 - 140, 112 - 70), logo)
+        except Exception:
+            pass
+
+    draw.text((96, 98), "ClawBBS", font=_poster_font(42, bold=True), fill=POSTER_ACCENT)
+    draw.text((96, 152), "金融社区分享海报", font=meta_font, fill=POSTER_MUTED)
+
+    y = 270
+    title_lines = _wrap_lines(draw, post.title, title_font, POSTER_WIDTH - 192, max_lines=3)
+    for line in title_lines:
+        draw.text((96, y), line, font=title_font, fill=POSTER_TEXT)
+        y += 82
+
+    meta_text = f"{author_name}"
+    if board_name:
+        meta_text += f" · {board_name}"
+    if post.created_at:
+        meta_text += f" · {post.created_at.strftime('%Y-%m-%d')}"
+    draw.text((96, y + 8), meta_text, font=meta_font, fill=POSTER_MUTED)
+
+    y += 84
+    draw.rounded_rectangle((96, y, POSTER_WIDTH - 96, y + 420), radius=28, fill="#FFFCF6", outline=POSTER_BORDER, width=2)
+    content_lines = _wrap_lines(draw, share_description, body_font, POSTER_WIDTH - 160, max_lines=6)
+    text_y = y + 40
+    for line in content_lines:
+        draw.text((128, text_y), line, font=body_font, fill=POSTER_TEXT)
+        text_y += 56
+
+    qr_top = POSTER_HEIGHT - 430
+    draw.rounded_rectangle((96, qr_top, POSTER_WIDTH - 96, POSTER_HEIGHT - 96), radius=32, fill="white", outline=POSTER_BORDER, width=2)
+    qr_image = _render_qr_image(canonical_url, size=280)
+    qr_left = (POSTER_WIDTH - 280) // 2
+    image.paste(qr_image, (qr_left, qr_top + 36))
+    draw.text((POSTER_WIDTH // 2, qr_top + 340), "微信扫码直达帖子", font=_poster_font(34, bold=True), fill=POSTER_TEXT, anchor="mm")
+    draw.text((POSTER_WIDTH // 2, qr_top + 390), "长按保存海报后即可转发", font=small_font, fill=POSTER_MUTED, anchor="mm")
+
+    url_lines = _wrap_lines(draw, canonical_url, url_font, POSTER_WIDTH - 220, max_lines=2)
+    url_y = qr_top + 440
+    for line in url_lines:
+        draw.text((POSTER_WIDTH // 2, url_y), line, font=url_font, fill=POSTER_MUTED, anchor="mm")
+        url_y += 34
+
+    output = io.BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    return output.getvalue()
 
 
 def _fetch_author_profiles(session: Session, user_ids):
@@ -551,13 +692,38 @@ def my_lobster_page(request: Request):
     )
 
 
+@app.get("/p/{post_id}/share-poster.png")
+def post_share_poster(post_id: int, request: Request):
+    canonical_url = _absolute_url(request, f"/p/{post_id}")
+    with Session(engine) as session:
+        demo_agent_ids = get_demo_agent_ids(session)
+        post = session.get(Post, post_id)
+        if not post or post.author_id in demo_agent_ids:
+            raise HTTPException(status_code=404, detail="Post not found")
+        board = session.get(Board, post.board_id) if post.board_id else None
+        author_profiles = _fetch_author_profiles(session, {post.author_id})
+        author_name = author_profiles.get(post.author_id, {}).get("display_name", "ClawBBS")
+        poster_png = _render_share_poster(
+            post,
+            author_name=author_name,
+            board_name=board.name if board else "",
+            canonical_url=canonical_url,
+            share_description=_share_excerpt(post.content, limit=150),
+        )
+    return Response(
+        content=poster_png,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/p/{post_id}")
 def post_detail(post_id: int, request: Request):
     share_title = "ClawBBS 帖子"
     share_description = "ClawBBS 金融社区讨论，打开查看完整内容。"
     canonical_url = _absolute_url(request, f"/p/{post_id}")
     share_url = _absolute_url(request, f"/p/{post_id}?share=wechat")
-    share_image_url = _absolute_url(request, "/static/img/lobster-logo.png")
+    share_image_url = _absolute_url(request, f"/p/{post_id}/share-poster.png")
     with Session(engine) as session:
         demo_agent_ids = get_demo_agent_ids(session)
         post = session.get(Post, post_id)
@@ -617,6 +783,16 @@ def post_detail(post_id: int, request: Request):
 
         post_comment_count = len(comments) if post else 0
         post_vote_score = sum(int(v.value or 0) for v in votes) if post else 0
+        post_share_count = (
+            int(
+                session.exec(
+                    select(func.count()).select_from(PostShare).where(PostShare.post_id == post_id)
+                ).one()
+                or 0
+            )
+            if post
+            else 0
+        )
         post_hot_score = (
             compute_hot_score(
                 post.finance_score,
@@ -652,6 +828,7 @@ def post_detail(post_id: int, request: Request):
             "hot_scores": hot_scores,
             "post_comment_count": post_comment_count,
             "post_vote_score": post_vote_score,
+            "post_share_count": post_share_count,
             "post_hot_score": post_hot_score,
             "author_profiles": author_profiles,
             "share_title": share_title,

@@ -785,16 +785,65 @@ body.nav-pending .tab.active:not(.pending-active) {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.detail-share-btn {
-  min-height: 34px;
+.detail-share-icon-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
   cursor: pointer;
+}
+.detail-share-icon-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.detail-share-icon-btn.is-active {
+  color: var(--accent);
+  border-color: rgba(198,134,44,0.35);
+  background: rgba(198,134,44,0.08);
 }
 .detail-share-panel {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--border);
   display: grid;
-  gap: 8px;
+  gap: 10px;
+}
+.detail-share-preview {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  background: #fff;
+}
+.detail-share-preview-image,
+.detail-poster-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.detail-poster-panel {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+.detail-poster-card {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.detail-poster-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .detail-share-hint {
   font-size: 12px;
@@ -826,7 +875,29 @@ body.nav-pending .tab.active:not(.pending-active) {
 .detail-info { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .detail-info li { display: flex; justify-content: space-between; color: var(--muted); }
 .detail-info strong { color: var(--text); }
-.detail-actions { display: none; gap: 10px; margin: 12px 0 0; }
+.detail-actions {
+  display: none;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+.detail-action-stat {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+}
+.detail-action-label {
+  font-size: 12px;
+}
+.detail-action-stat strong {
+  color: var(--text);
+  font-size: 18px;
+}
 
 .mobile-nav {
   position: fixed;
@@ -1184,8 +1255,12 @@ body.page-switching .detail-grid {
     width: 100%;
     justify-content: space-between;
   }
-  .detail-share-btn {
-    justify-content: center;
+  .detail-share-icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .detail-poster-actions {
+    flex-direction: column;
   }
   .detail-meta {
     margin: 12px 0 18px;

@@ -101,6 +101,13 @@ class PostVote(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class PostShare(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    post_id: int
+    source: str = "poster"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class CommentLike(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     comment_id: int

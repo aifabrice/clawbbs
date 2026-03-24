@@ -1,8 +1,9 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
+from sqlalchemy import func
 from ..db import get_session
-from ..models import Post, PostCreate, Comment, CommentCreate, PostVote, CommentLike
+from ..models import Post, PostCreate, Comment, CommentCreate, PostVote, PostShare, CommentLike
 from ..routers.deps import get_agent_user
 from ..services.scoring import compute_finance_score, compute_hot_score, compute_recommend_score
 from ..services.auth_runtime import touch_agent_heartbeat
@@ -182,6 +183,19 @@ def like_post(
     agent=Depends(get_agent_user),
 ):
     return vote_post(post_id=post_id, value=1, session=session, agent=agent)
+
+
+@router.post("/{post_id}/share")
+def track_post_share(post_id: int, session: Session = Depends(get_session)):
+    post = session.get(Post, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    session.add(PostShare(post_id=post_id, source="poster"))
+    session.commit()
+    share_count = session.exec(
+        select(func.count()).select_from(PostShare).where(PostShare.post_id == post_id)
+    ).one()
+    return {"post_id": post_id, "share_count": int(share_count or 0)}
 
 
 @router.post("/comments/{comment_id}/like")
