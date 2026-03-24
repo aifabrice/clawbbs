@@ -44,8 +44,8 @@ from .routers import health, posts, boards, skills, agent_feed, users, tasks
 logger = logging.getLogger("clawbbs.http")
 
 POSTER_WIDTH = 1080
-POSTER_HEIGHT = 1520
-POSTER_BG = "#F7F1E8"
+POSTER_HEIGHT = 1440
+POSTER_BG = "#F5EFE6"
 POSTER_PANEL = "#FFFDF9"
 POSTER_BORDER = "#E8DFD2"
 POSTER_TEXT = "#241B16"
@@ -269,60 +269,82 @@ def _render_share_poster(post: Post, *, author_name: str, board_name: str, canon
     image = Image.new("RGB", (POSTER_WIDTH, POSTER_HEIGHT), POSTER_BG)
     draw = ImageDraw.Draw(image)
 
-    title_font = _poster_font(64, bold=True)
-    meta_font = _poster_font(30, bold=False)
-    body_font = _poster_font(38, bold=False)
-    small_font = _poster_font(26, bold=False)
-    url_font = _poster_font(24, bold=False)
+    brand_font = _poster_font(40, bold=True)
+    badge_font = _poster_font(24, bold=True)
+    title_font = _poster_font(60, bold=True)
+    meta_font = _poster_font(28, bold=False)
+    body_font = _poster_font(36, bold=False)
+    qr_title_font = _poster_font(34, bold=True)
+    small_font = _poster_font(24, bold=False)
 
-    draw.rounded_rectangle((48, 48, POSTER_WIDTH - 48, POSTER_HEIGHT - 48), radius=40, fill=POSTER_PANEL, outline=POSTER_BORDER, width=2)
-    draw.rounded_rectangle((72, 72, POSTER_WIDTH - 72, 220), radius=28, fill="#FFF7EA")
+    outer = (44, 44, POSTER_WIDTH - 44, POSTER_HEIGHT - 44)
+    draw.rounded_rectangle(outer, radius=42, fill=POSTER_PANEL, outline=POSTER_BORDER, width=2)
+
+    header = (76, 76, POSTER_WIDTH - 76, 214)
+    draw.rounded_rectangle(header, radius=30, fill="#FBF4E8")
 
     if POSTER_LOGO_PATH.exists():
         try:
             logo = Image.open(POSTER_LOGO_PATH).convert("RGBA")
-            logo = logo.resize((140, 140), Image.Resampling.LANCZOS)
-            image.paste(logo, (POSTER_WIDTH - 72 - 140, 112 - 70), logo)
+            logo = logo.resize((108, 108), Image.Resampling.LANCZOS)
+            image.paste(logo, (96, 91), logo)
         except Exception:
             pass
 
-    draw.text((96, 98), "ClawBBS", font=_poster_font(42, bold=True), fill=POSTER_ACCENT)
-    draw.text((96, 152), "金融社区分享海报", font=meta_font, fill=POSTER_MUTED)
+    draw.text((224, 106), "ClawBBS", font=brand_font, fill=POSTER_TEXT)
+    draw.text((224, 154), "金融社区精选分享", font=meta_font, fill=POSTER_MUTED)
 
-    y = 270
-    title_lines = _wrap_lines(draw, post.title, title_font, POSTER_WIDTH - 192, max_lines=3)
+    badge_text = (board_name or "讨论精选")[:14]
+    badge_bbox = draw.textbbox((0, 0), badge_text, font=badge_font)
+    badge_w = int(badge_bbox[2] - badge_bbox[0]) + 44
+    badge_x1 = POSTER_WIDTH - 96 - badge_w
+    draw.rounded_rectangle((badge_x1, 108, POSTER_WIDTH - 96, 156), radius=22, fill="#FFFDF9", outline=POSTER_BORDER, width=2)
+    draw.text((badge_x1 + 22, 120), badge_text, font=badge_font, fill=POSTER_ACCENT)
+
+    title_y = 268
+    title_lines = _wrap_lines(draw, (post.title or "").replace("\n", " "), title_font, POSTER_WIDTH - 192, max_lines=2)
     for line in title_lines:
-        draw.text((96, y), line, font=title_font, fill=POSTER_TEXT)
-        y += 82
+        draw.text((96, title_y), line, font=title_font, fill=POSTER_TEXT)
+        title_y += 78
 
-    meta_text = f"{author_name}"
-    if board_name:
-        meta_text += f" · {board_name}"
-    if post.created_at:
-        meta_text += f" · {post.created_at.strftime('%Y-%m-%d')}"
-    draw.text((96, y + 8), meta_text, font=meta_font, fill=POSTER_MUTED)
+    meta_items = [item for item in [author_name, post.created_at.strftime('%Y-%m-%d') if post.created_at else ""] if item]
+    meta_text = " · ".join(meta_items)
+    draw.text((96, title_y + 6), meta_text, font=meta_font, fill=POSTER_MUTED)
 
-    y += 84
-    draw.rounded_rectangle((96, y, POSTER_WIDTH - 96, y + 420), radius=28, fill="#FFFCF6", outline=POSTER_BORDER, width=2)
-    content_lines = _wrap_lines(draw, share_description, body_font, POSTER_WIDTH - 160, max_lines=6)
-    text_y = y + 40
+    excerpt_top = title_y + 70
+    excerpt_bottom = excerpt_top + 360
+    draw.rounded_rectangle((96, excerpt_top, POSTER_WIDTH - 96, excerpt_bottom), radius=30, fill="#FFFCF7", outline=POSTER_BORDER, width=2)
+    draw.text((128, excerpt_top + 32), "核心观点", font=badge_font, fill=POSTER_ACCENT)
+
+    content_lines = _wrap_lines(draw, share_description, body_font, POSTER_WIDTH - 256, max_lines=5)
+    text_y = excerpt_top + 94
     for line in content_lines:
         draw.text((128, text_y), line, font=body_font, fill=POSTER_TEXT)
-        text_y += 56
+        text_y += 58
 
-    qr_top = POSTER_HEIGHT - 430
-    draw.rounded_rectangle((96, qr_top, POSTER_WIDTH - 96, POSTER_HEIGHT - 96), radius=32, fill="white", outline=POSTER_BORDER, width=2)
-    qr_image = _render_qr_image(canonical_url, size=280)
-    qr_left = (POSTER_WIDTH - 280) // 2
-    image.paste(qr_image, (qr_left, qr_top + 36))
-    draw.text((POSTER_WIDTH // 2, qr_top + 340), "微信扫码直达帖子", font=_poster_font(34, bold=True), fill=POSTER_TEXT, anchor="mm")
-    draw.text((POSTER_WIDTH // 2, qr_top + 390), "长按保存海报后即可转发", font=small_font, fill=POSTER_MUTED, anchor="mm")
+    qr_top = excerpt_bottom + 42
+    qr_bottom = POSTER_HEIGHT - 96
+    draw.rounded_rectangle((96, qr_top, POSTER_WIDTH - 96, qr_bottom), radius=32, fill="#FFF9F1", outline=POSTER_BORDER, width=2)
 
-    url_lines = _wrap_lines(draw, canonical_url, url_font, POSTER_WIDTH - 220, max_lines=2)
-    url_y = qr_top + 440
-    for line in url_lines:
-        draw.text((POSTER_WIDTH // 2, url_y), line, font=url_font, fill=POSTER_MUTED, anchor="mm")
-        url_y += 34
+    qr_image = _render_qr_image(canonical_url, size=250)
+    qr_left = 132
+    qr_y = qr_top + 42
+    image.paste(qr_image, (qr_left, qr_y))
+
+    info_x = 440
+    draw.text((info_x, qr_top + 64), "扫码直达原帖", font=qr_title_font, fill=POSTER_TEXT)
+    info_lines = [
+        "打开完整帖子与评论区",
+        "长按上方海报可直接转发",
+        "也可以保存到手机后再发群",
+    ]
+    info_y = qr_top + 128
+    for line in info_lines:
+        draw.text((info_x, info_y), line, font=meta_font, fill=POSTER_MUTED)
+        info_y += 58
+
+    draw.rounded_rectangle((info_x, qr_bottom - 114, POSTER_WIDTH - 128, qr_bottom - 48), radius=24, fill="#FFF2E5")
+    draw.text((info_x + 28, qr_bottom - 94), "微信内建议：长按海报 → 发送给朋友/群", font=small_font, fill="#C85A2D")
 
     output = io.BytesIO()
     image.save(output, format="PNG", optimize=True)

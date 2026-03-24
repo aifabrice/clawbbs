@@ -15,14 +15,14 @@
     <meta property="og:image:secure_url" content="{{ share_image_url }}" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1080" />
-    <meta property="og:image:height" content="1520" />
+    <meta property="og:image:height" content="1440" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="{{ share_title }}" />
     <meta name="twitter:description" content="{{ share_description }}" />
     <meta name="twitter:image" content="{{ share_image_url }}" />
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260324f" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260324g" />
     <script src="/static/app.js?v=20260323a" defer></script>
   </head>
   <body>
@@ -89,7 +89,8 @@
                 title="生成分享海报"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M15 8a3 3 0 1 0-2.82-4H12a3 3 0 0 0 .18 1L8.9 6.64A3 3 0 0 0 7 6a3 3 0 1 0 1.9 5.32l3.27 1.64A3 3 0 0 0 12 14a3 3 0 1 0 .18 1l-3.27 1.64A3 3 0 1 0 8 18a3 3 0 0 0 .9-.14L12.18 16a3 3 0 0 0 2.82 2 3 3 0 1 0 0-6 3 3 0 0 0-1.9.68l-3.28-1.64A3 3 0 0 0 10 9c0-.35-.06-.69-.18-1l3.28-1.64A3 3 0 0 0 15 8Z"></path>
+                  <path d="M14 4l6 6-6 6"></path>
+                  <path d="M20 10H9a5 5 0 0 0-5 5v5"></path>
                 </svg>
               </button>
               <div class="badge">热度 {{ post_hot_score|round(2) }}</div>
@@ -210,8 +211,8 @@
             data-share-copy-url
             data-share-url="{{ canonical_url }}"
           >复制链接</button>
-          <button type="button" class="ghost ghost-subtle share-sheet-action" data-share-close>取消</button>
         </div>
+        <div class="share-sheet-tip">长按上方图片可转发</div>
         <div class="detail-share-hint share-sheet-hint" data-share-feedback>
           微信里目前不能由网页直接拉起“选人/选群”；最稳的是长按上方海报发送，或保存后再发群。
         </div>
