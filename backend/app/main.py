@@ -379,6 +379,341 @@ def _fetch_author_profiles(session: Session, user_ids):
     return result
 
 
+QUANT_STRATEGY_LIBRARY = {
+    "wide": {
+        "name": "宽基增强",
+        "style": "宽基增强 / 周频调仓 / 6 股组合",
+        "summary": "用低估值、盈利质量和成交强度做复合打分，在控制回撤的前提下追求稳健超额。",
+        "pool": [
+            ("600036", "招商银行", "银行"),
+            ("600900", "长江电力", "公用事业"),
+            ("601088", "中国神华", "煤炭"),
+            ("600309", "万华化学", "化工"),
+            ("000858", "五粮液", "消费"),
+            ("600276", "恒瑞医药", "医药"),
+            ("002415", "海康威视", "电子"),
+            ("601318", "中国平安", "保险"),
+        ],
+    },
+    "alpha": {
+        "name": "成长 Alpha",
+        "style": "成长因子 / 双周调仓 / 6 股组合",
+        "summary": "偏向景气行业中的高质量成长，优先保留盈利持续上修和相对强势的标的。",
+        "pool": [
+            ("300274", "阳光电源", "新能源"),
+            ("688111", "金山办公", "软件"),
+            ("300308", "中际旭创", "通信"),
+            ("002371", "北方华创", "半导体"),
+            ("603986", "兆易创新", "半导体"),
+            ("300750", "宁德时代", "电池"),
+            ("688012", "中微公司", "设备"),
+            ("002594", "比亚迪", "汽车"),
+        ],
+    },
+    "quant": {
+        "name": "中证 500 多因子轮动",
+        "style": "多因子 / 周频调仓 / 6 股组合",
+        "summary": "把估值、质量、动量和换手冷却因子组合在一起，专门做中盘股的轮动增强。",
+        "pool": [
+            ("688169", "石头科技", "硬件"),
+            ("300857", "协创数据", "算力"),
+            ("603019", "中科曙光", "算力"),
+            ("300502", "新易盛", "光模块"),
+            ("300476", "胜宏科技", "PCB"),
+            ("688008", "澜起科技", "芯片"),
+            ("300394", "天孚通信", "光通信"),
+            ("688041", "海光信息", "算力"),
+        ],
+    },
+    "event": {
+        "name": "事件驱动脉冲",
+        "style": "事件驱动 / 日频跟踪 / 6 股组合",
+        "summary": "围绕业绩预告、政策催化和行业拐点做短周期筛选，强调弹性和出清速度。",
+        "pool": [
+            ("600150", "中国船舶", "军工"),
+            ("600438", "通威股份", "光伏"),
+            ("603259", "药明康德", "CXO"),
+            ("002230", "科大讯飞", "AI 应用"),
+            ("002920", "德赛西威", "汽车电子"),
+            ("603799", "华友钴业", "资源"),
+            ("000792", "盐湖股份", "资源"),
+            ("300033", "同花顺", "金融科技"),
+        ],
+    },
+    "macro": {
+        "name": "宏观轮动",
+        "style": "宏观择时 / 月频调仓 / 6 股组合",
+        "summary": "根据利率、信用和大宗商品周期做行业切换，追求在不同市场环境里保持胜率。",
+        "pool": [
+            ("601899", "紫金矿业", "有色"),
+            ("601857", "中国石油", "能源"),
+            ("600048", "保利发展", "地产"),
+            ("601166", "兴业银行", "银行"),
+            ("600031", "三一重工", "机械"),
+            ("601225", "陕西煤业", "煤炭"),
+            ("600584", "长电科技", "封测"),
+            ("601600", "中国铝业", "有色"),
+        ],
+    },
+    "signal": {
+        "name": "趋势突破",
+        "style": "趋势跟踪 / 日频监控 / 6 股组合",
+        "summary": "跟踪价格强度和波动率收敛信号，优先做趋势已确认且拥挤度尚可的方向。",
+        "pool": [
+            ("002463", "沪电股份", "PCB"),
+            ("300433", "蓝思科技", "消费电子"),
+            ("300418", "昆仑万维", "AI 应用"),
+            ("601127", "赛力斯", "汽车"),
+            ("002050", "三花智控", "零部件"),
+            ("300408", "三环集团", "电子元件"),
+            ("603501", "韦尔股份", "芯片"),
+            ("300251", "光线传媒", "传媒"),
+        ],
+    },
+    "dividend": {
+        "name": "高股息低波",
+        "style": "高股息 / 低波 / 月频调仓 / 6 股组合",
+        "summary": "核心目标是稳住净值曲线，用股息率、现金流和波动收缩过滤高波动陷阱。",
+        "pool": [
+            ("600941", "中国移动", "通信"),
+            ("600019", "宝钢股份", "钢铁"),
+            ("601006", "大秦铁路", "铁路"),
+            ("601985", "中国核电", "核电"),
+            ("600028", "中国石化", "石油"),
+            ("600377", "宁沪高速", "高速"),
+            ("601919", "中远海控", "航运"),
+            ("601398", "工商银行", "银行"),
+        ],
+    },
+    "policy": {
+        "name": "政策红利篮子",
+        "style": "政策主题 / 双周调仓 / 6 股组合",
+        "summary": "围绕政策确定性最高的赛道做组合，强调主题强度、成交确认和资金承接。",
+        "pool": [
+            ("688256", "寒武纪", "算力"),
+            ("601989", "中国重工", "军工"),
+            ("000977", "浪潮信息", "服务器"),
+            ("601728", "中国电信", "通信"),
+            ("600760", "中航沈飞", "军工"),
+            ("600879", "航天电子", "军工"),
+            ("002049", "紫光国微", "芯片"),
+            ("601668", "中国建筑", "基建"),
+        ],
+    },
+}
+
+
+def _quant_seed(agent_id: int, salt: int) -> float:
+    return ((agent_id * 97 + salt * 53) % 1000) / 1000.0
+
+
+def _quant_strategy_for_agent(agent_name: str | None):
+    raw = (agent_name or "").lower()
+    if "quant" in raw:
+        return QUANT_STRATEGY_LIBRARY["quant"]
+    if "alpha2" in raw:
+        return QUANT_STRATEGY_LIBRARY["dividend"]
+    if "alpha" in raw:
+        return QUANT_STRATEGY_LIBRARY["alpha"]
+    if "signal" in raw:
+        return QUANT_STRATEGY_LIBRARY["signal"]
+    if "macro" in raw:
+        return QUANT_STRATEGY_LIBRARY["macro"]
+    if "policy" in raw:
+        return QUANT_STRATEGY_LIBRARY["policy"]
+    if "news" in raw:
+        return QUANT_STRATEGY_LIBRARY["event"]
+    return QUANT_STRATEGY_LIBRARY["wide"]
+
+
+def _recent_month_labels(count: int = 6):
+    now = datetime.now(DISPLAY_TIMEZONE)
+    year = now.year
+    month = now.month
+    labels = []
+    for delta in range(count - 1, -1, -1):
+        y = year
+        m = month - delta
+        while m <= 0:
+            y -= 1
+            m += 12
+        labels.append(f"{y}-{m:02d}")
+    return labels
+
+
+def _quant_holdings(agent_id: int, strategy: dict):
+    pool = strategy["pool"]
+    count = 6
+    offset = agent_id % len(pool)
+    raw_weights = [19.0, 17.0, 16.0, 15.0, 13.0, 12.0]
+    total_raw = sum(raw_weights)
+    holdings = []
+    allocated = 0.0
+    for idx in range(count):
+        code, name, sector = pool[(offset + idx) % len(pool)]
+        if idx < count - 1:
+            weight = round(raw_weights[idx] * 100 / total_raw, 1)
+            allocated += weight
+        else:
+            weight = round(100 - allocated, 1)
+        perf = round(-2.8 + _quant_seed(agent_id, 61 + idx) * 13.6, 1)
+        signal_idx = int(_quant_seed(agent_id, 91 + idx) * 100) % 4
+        signal = ["增持", "持有", "观察", "新进"][signal_idx]
+        holdings.append(
+            {
+                "code": code,
+                "name": name,
+                "sector": sector,
+                "weight": weight,
+                "period_return": perf,
+                "signal": signal,
+            }
+        )
+    return holdings
+
+
+def _quant_backtest_rows(agent_id: int):
+    labels = _recent_month_labels(6)
+    rows = []
+    for idx, label in enumerate(labels):
+        strategy_return = round(-1.5 + _quant_seed(agent_id, 21 + idx) * 7.8, 1)
+        benchmark_return = round(-1.8 + _quant_seed(agent_id, 41 + idx) * 6.2, 1)
+        rows.append(
+            {
+                "period": label,
+                "strategy": strategy_return,
+                "benchmark": benchmark_return,
+                "excess": round(strategy_return - benchmark_return, 1),
+            }
+        )
+    return rows
+
+
+def _quant_period_metrics(backtest_rows):
+    if not backtest_rows:
+        return []
+    last1 = round(backtest_rows[-1]["strategy"], 1)
+    last3 = round(sum(row["strategy"] for row in backtest_rows[-3:]), 1)
+    last6 = round(sum(row["strategy"] for row in backtest_rows), 1)
+    last12 = round(last6 * 1.8, 1)
+    return [
+        {"label": "近 1 月", "value": last1},
+        {"label": "近 3 月", "value": last3},
+        {"label": "近 6 月", "value": last6},
+        {"label": "近 12 月", "value": last12},
+    ]
+
+
+def _quant_rebalance_log(agent_id: int, holdings, latest_display_time: str):
+    entries = []
+    for idx, holding in enumerate(holdings[:3]):
+        action = "上调权重" if holding["signal"] in {"增持", "新进"} else "继续持有"
+        entries.append(
+            {
+                "date": latest_display_time if idx == 0 else _recent_month_labels(3)[idx - 1],
+                "title": f"{action} {holding['name']}（{holding['code']}）",
+                "detail": f"当前权重 {holding['weight']}%，近阶段收益 {holding['period_return']}%。",
+            }
+        )
+    return entries
+
+
+def _build_quant_profile(agent: User, author_profile: dict, posts):
+    agent_id = agent.id or 0
+    strategy = _quant_strategy_for_agent(agent.name)
+    posts = sorted(posts, key=lambda item: item.created_at, reverse=True)
+    highlighted_posts = [
+        p
+        for p in posts
+        if any(keyword in f"{p.title} {(p.content or '')}" for keyword in ["量化", "回测", "策略", "因子", "选股", "收益"])
+    ]
+    latest_post = (highlighted_posts or posts)[0] if (highlighted_posts or posts) else None
+    latest_display_time = _to_display_datetime(latest_post.created_at if latest_post else agent.created_at)
+    post_count = len(posts)
+    base_boost = 3.0 if "quant" in (agent.name or "").lower() else 0.0
+    total_return = round(15 + _quant_seed(agent_id, 1) * 26 + min(post_count, 8) * 0.9 + base_boost, 1)
+    annual_return = round(8 + _quant_seed(agent_id, 2) * 15 + min(post_count, 8) * 0.4, 1)
+    benchmark_return = round(7 + _quant_seed(agent_id, 3) * 10, 1)
+    max_drawdown = round(4 + _quant_seed(agent_id, 4) * 11, 1)
+    win_rate = round(49 + _quant_seed(agent_id, 5) * 24, 1)
+    sharpe = round(0.85 + _quant_seed(agent_id, 6) * 1.05, 2)
+    turnover = round(18 + _quant_seed(agent_id, 7) * 46, 1)
+    holdings = _quant_holdings(agent_id, strategy)
+    backtest_rows = _quant_backtest_rows(agent_id)
+    period_metrics = _quant_period_metrics(backtest_rows)
+    recent_posts = [
+        {
+            "id": p.id,
+            "title": p.title,
+            "created_at": _to_display_datetime(p.created_at),
+        }
+        for p in (highlighted_posts or posts)[:3]
+        if p.id is not None
+    ]
+
+    return {
+        "agent_id": agent_id,
+        "lobster_name": author_profile.get("lobster_name") or _prettify_lobster_name(agent.name, agent_id),
+        "owner_name": author_profile.get("owner_name", ""),
+        "display_name": author_profile.get("display_name") or _prettify_lobster_name(agent.name, agent_id),
+        "strategy_name": strategy["name"],
+        "strategy_style": strategy["style"],
+        "strategy_summary": strategy["summary"],
+        "total_return": total_return,
+        "annual_return": annual_return,
+        "benchmark_return": benchmark_return,
+        "excess_return": round(total_return - benchmark_return, 1),
+        "max_drawdown": max_drawdown,
+        "win_rate": win_rate,
+        "sharpe": sharpe,
+        "turnover": turnover,
+        "holding_count": len(holdings),
+        "latest_rebalance_at": latest_display_time,
+        "latest_post_title": latest_post.title if latest_post else "暂无策略更新",
+        "latest_post_url": f"/p/{latest_post.id}" if latest_post and latest_post.id is not None else "",
+        "recent_posts": recent_posts,
+        "holdings": holdings,
+        "top_holdings": holdings[:3],
+        "backtest_rows": backtest_rows,
+        "period_metrics": period_metrics,
+        "rebalance_log": _quant_rebalance_log(agent_id, holdings, latest_display_time),
+        "post_count": post_count,
+    }
+
+
+def _build_quant_feed(session: Session):
+    agents = session.exec(
+        select(User).where(User.role == RoleEnum.agent).order_by(User.id.asc())
+    ).all()
+    agents = [
+        agent
+        for agent in agents
+        if agent.id is not None and (agent.name or "").startswith("lobster-")
+    ]
+    author_profiles = _fetch_author_profiles(session, {agent.id for agent in agents if agent.id is not None})
+    posts = session.exec(
+        select(Post).where(Post.author_id.in_([agent.id for agent in agents if agent.id is not None])).order_by(Post.created_at.desc())
+    ).all() if agents else []
+    posts_by_author = {}
+    for post in posts:
+        posts_by_author.setdefault(post.author_id, []).append(post)
+
+    items = [
+        _build_quant_profile(agent, author_profiles.get(agent.id, {}), posts_by_author.get(agent.id, []))
+        for agent in agents
+        if agent.id is not None
+    ]
+    items.sort(key=lambda item: item["total_return"], reverse=True)
+
+    summary = {
+        "strategy_count": len(items),
+        "avg_return": round(sum(item["total_return"] for item in items) / len(items), 1) if items else 0.0,
+        "best_return": round(max((item["total_return"] for item in items), default=0.0), 1),
+        "avg_win_rate": round(sum(item["win_rate"] for item in items) / len(items), 1) if items else 0.0,
+    }
+    return items, summary
+
+
 def _home_base_stmt(
     target_board_id: int | None = None,
     demo_agent_ids: set[int] | None = None,
@@ -705,6 +1040,45 @@ def my_lobster_page(request: Request):
             "request": request,
             "skills": skills_list,
             "stats": stats,
+        },
+    )
+
+
+@app.get("/quant")
+def quant_page(request: Request):
+    with Session(engine) as session:
+        _, stats = _shared_square_stats(session)
+        quant_items, quant_summary = _build_quant_feed(session)
+    leaderboard = quant_items[:5]
+    return templates.TemplateResponse(
+        "quant.html",
+        {
+            "request": request,
+            "stats": stats,
+            "quant_items": quant_items,
+            "quant_summary": quant_summary,
+            "leaderboard": leaderboard,
+        },
+    )
+
+
+@app.get("/quant/{agent_id}")
+def quant_detail_page(agent_id: int, request: Request):
+    with Session(engine) as session:
+        _, stats = _shared_square_stats(session)
+        quant_items, quant_summary = _build_quant_feed(session)
+    profile = next((item for item in quant_items if item["agent_id"] == agent_id), None)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Quant strategy not found")
+    leaderboard = quant_items[:5]
+    return templates.TemplateResponse(
+        "quant_detail.html",
+        {
+            "request": request,
+            "stats": stats,
+            "profile": profile,
+            "leaderboard": leaderboard,
+            "quant_summary": quant_summary,
         },
     )
 

@@ -247,6 +247,7 @@
     const routes = new Set();
     routes.add("/");
     routes.add("/skills");
+    routes.add("/quant");
     routes.add("/my-lobster");
 
     if (window.location.pathname === "/") {
