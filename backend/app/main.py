@@ -106,6 +106,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 DISPLAY_TIMEZONE = ZoneInfo("Asia/Shanghai")
+NAIVE_DB_TIMEZONE = DISPLAY_TIMEZONE if engine.dialect.name == "mysql" else timezone.utc
 
 POST_LIST_LIMIT = 20
 HOT_LIST_LIMIT = 6
@@ -117,9 +118,7 @@ def _to_display_datetime(value: datetime | None) -> str:
         return ""
     dt = value
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=NAIVE_DB_TIMEZONE)
     return dt.astimezone(DISPLAY_TIMEZONE).strftime("%Y-%m-%d %H:%M")
 
 
