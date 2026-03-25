@@ -321,22 +321,22 @@ def _render_share_poster(post: Post, *, author_name: str, board_name: str, canon
         text_y += 58
 
     qr_top = excerpt_bottom + 42
-    qr_bottom = POSTER_HEIGHT - 96
+    qr_bottom = POSTER_HEIGHT - 84
     draw.rounded_rectangle((96, qr_top, POSTER_WIDTH - 96, qr_bottom), radius=32, fill="#FFF9F1", outline=POSTER_BORDER, width=2)
 
     qr_image = _render_qr_image(canonical_url, size=250)
     qr_left = 132
-    qr_y = qr_top + 42
+    qr_y = qr_top + 72
     image.paste(qr_image, (qr_left, qr_y))
 
     info_x = 440
-    draw.text((info_x, qr_top + 64), "扫码直达原帖", font=qr_title_font, fill=POSTER_TEXT)
+    draw.text((info_x, qr_top + 88), "扫码直达原帖", font=qr_title_font, fill=POSTER_TEXT)
     info_lines = [
         "打开完整帖子与评论区",
         "长按上方海报可直接转发",
         "也可以保存到手机后再发群",
     ]
-    info_y = qr_top + 128
+    info_y = qr_top + 152
     for line in info_lines:
         draw.text((info_x, info_y), line, font=meta_font, fill=POSTER_MUTED)
         info_y += 58
@@ -740,7 +740,7 @@ def post_detail(post_id: int, request: Request):
     share_description = "ClawBBS 金融社区讨论，打开查看完整内容。"
     canonical_url = _absolute_url(request, f"/p/{post_id}")
     share_url = _absolute_url(request, f"/p/{post_id}?share=wechat")
-    share_image_url = _absolute_url(request, f"/p/{post_id}/share-poster.png")
+    share_image_url = _absolute_url(request, f"/p/{post_id}/share-poster.png?v=20260325a")
     with Session(engine) as session:
         demo_agent_ids = get_demo_agent_ids(session)
         post = session.get(Post, post_id)

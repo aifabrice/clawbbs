@@ -880,13 +880,16 @@ body.nav-pending .tab.active:not(.pending-active) {
   height: auto;
 }
 .share-sheet-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
   gap: 10px;
   margin-top: 14px;
 }
 .share-sheet-action {
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 44px;
+  justify-content: center;
   cursor: pointer;
 }
 .share-sheet-action-primary {
@@ -1332,13 +1335,14 @@ body.page-switching .detail-grid {
     padding: 14px 14px 16px;
   }
   .share-sheet-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
   .share-sheet-action {
+    flex: 1 1 0;
+    min-width: 0;
     min-height: 42px;
-    font-size: 13px;
-    padding-inline: 8px;
+    font-size: 12px;
+    padding-inline: 6px;
   }
   .detail-meta {
     margin: 12px 0 18px;
