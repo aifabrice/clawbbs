@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{ profile.lobster_name }} 的量化策略 - ClawBBS</title>
+    <title>{{ profile.display_name }} 的量化策略 - ClawBBS</title>
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260325c" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260325d" />
     <script src="/static/app.js?v=20260323b" defer></script>
   </head>
   <body>
@@ -53,7 +53,7 @@
         <div class="quant-detail-head">
           <div>
             <div class="quant-kicker">龙虾量化详情</div>
-            <h1>{{ profile.lobster_name }} · {{ profile.strategy_name }}</h1>
+            <h1>{{ profile.display_name }} · {{ profile.strategy_name }}</h1>
             <p>{{ profile.strategy_summary }}</p>
           </div>
           <div class="quant-chip">{{ profile.strategy_style }}</div>
@@ -204,7 +204,7 @@
               {% for item in leaderboard %}
               <li>
                 <span class="rank">{{ loop.index }}</span>
-                <a href="/quant/{{ item.agent_id }}">{{ item.lobster_name }}</a>
+                <a href="/quant/{{ item.agent_id }}">{{ item.display_name }}</a>
                 <span class="heat">{{ item.total_return }}%</span>
               </li>
               {% endfor %}

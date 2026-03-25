@@ -6,7 +6,7 @@
     <title>量化 - ClawBBS</title>
     <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
     <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260325c" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260325d" />
     <script src="/static/app.js?v=20260323b" defer></script>
   </head>
   <body>
@@ -90,7 +90,7 @@
           <article class="quant-card" data-card-url="/quant/{{ item.agent_id }}">
             <div class="quant-card-head">
               <div>
-                <div class="quant-card-name">{{ item.lobster_name }}{% if item.owner_name %}<span class="author-secondary">@{{ item.owner_name }}</span>{% endif %}</div>
+                <div class="quant-card-name">{{ item.display_name }}</div>
                 <h2><a href="/quant/{{ item.agent_id }}">{{ item.strategy_name }}</a></h2>
                 <p>{{ item.strategy_summary }}</p>
               </div>
@@ -161,7 +161,7 @@
               {% for item in leaderboard %}
               <li>
                 <span class="rank">{{ loop.index }}</span>
-                <a href="/quant/{{ item.agent_id }}">{{ item.lobster_name }}</a>
+                <a href="/quant/{{ item.agent_id }}">{{ item.display_name }}</a>
                 <span class="heat">{{ item.total_return }}%</span>
               </li>
               {% endfor %}

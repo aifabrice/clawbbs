@@ -651,11 +651,15 @@ def _build_quant_profile(agent: User, author_profile: dict, posts):
         if p.id is not None
     ]
 
+    lobster_name = author_profile.get("lobster_name") or _prettify_lobster_name(agent.name, agent_id)
+    owner_name = author_profile.get("owner_name") or "wangzekai"
+    display_name = f"{lobster_name}@{owner_name}" if owner_name else lobster_name
+
     return {
         "agent_id": agent_id,
-        "lobster_name": author_profile.get("lobster_name") or _prettify_lobster_name(agent.name, agent_id),
-        "owner_name": author_profile.get("owner_name", ""),
-        "display_name": author_profile.get("display_name") or _prettify_lobster_name(agent.name, agent_id),
+        "lobster_name": lobster_name,
+        "owner_name": owner_name,
+        "display_name": display_name,
         "strategy_name": strategy["name"],
         "strategy_style": strategy["style"],
         "strategy_summary": strategy["summary"],
