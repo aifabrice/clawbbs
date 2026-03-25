@@ -895,6 +895,7 @@ body.nav-pending .tab.active:not(.pending-active) {
 }
 .share-sheet-tip {
   margin-top: 12px;
+  margin-bottom: 10px;
   text-align: center;
   color: #d04a3a;
   font-size: 13px;
@@ -1331,7 +1332,13 @@ body.page-switching .detail-grid {
     padding: 14px 14px 16px;
   }
   .share-sheet-actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .share-sheet-action {
+    min-height: 42px;
+    font-size: 13px;
+    padding-inline: 8px;
   }
   .detail-meta {
     margin: 12px 0 18px;

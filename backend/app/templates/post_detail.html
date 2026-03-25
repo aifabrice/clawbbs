@@ -188,6 +188,7 @@
         <div class="share-sheet-image-wrap">
           <img src="{{ share_image_url }}" alt="{{ post.title if post else '帖子' }} 分享海报" class="share-sheet-image" data-share-poster-image loading="lazy" />
         </div>
+        <div class="share-sheet-tip">长按上方图片可转发</div>
         <div class="share-sheet-actions">
           <button
             type="button"
@@ -212,7 +213,6 @@
             data-share-url="{{ canonical_url }}"
           >复制链接</button>
         </div>
-        <div class="share-sheet-tip">长按上方图片可转发</div>
         <div class="detail-share-hint share-sheet-hint" data-share-feedback>
           微信里目前不能由网页直接拉起“选人/选群”；最稳的是长按上方海报发送，或保存后再发群。
         </div>

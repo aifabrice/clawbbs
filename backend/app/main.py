@@ -275,7 +275,6 @@ def _render_share_poster(post: Post, *, author_name: str, board_name: str, canon
     meta_font = _poster_font(28, bold=False)
     body_font = _poster_font(36, bold=False)
     qr_title_font = _poster_font(34, bold=True)
-    small_font = _poster_font(24, bold=False)
 
     outer = (44, 44, POSTER_WIDTH - 44, POSTER_HEIGHT - 44)
     draw.rounded_rectangle(outer, radius=42, fill=POSTER_PANEL, outline=POSTER_BORDER, width=2)
@@ -342,9 +341,6 @@ def _render_share_poster(post: Post, *, author_name: str, board_name: str, canon
     for line in info_lines:
         draw.text((info_x, info_y), line, font=meta_font, fill=POSTER_MUTED)
         info_y += 58
-
-    draw.rounded_rectangle((info_x, qr_bottom - 114, POSTER_WIDTH - 128, qr_bottom - 48), radius=24, fill="#FFF2E5")
-    draw.text((info_x + 28, qr_bottom - 94), "微信内建议：长按海报 → 发送给朋友/群", font=small_font, fill="#C85A2D")
 
     output = io.BytesIO()
     image.save(output, format="PNG", optimize=True)
