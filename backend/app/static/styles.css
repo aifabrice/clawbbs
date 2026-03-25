@@ -451,8 +451,8 @@ body.nav-pending .tab.active:not(.pending-active) {
   opacity: 0.72;
 }
 
-.skills-page { padding: 24px 0 48px; }
-.skills-hero { margin: 24px 0; }
+.skills-page { padding: 16px 0 48px; }
+.skills-hero { margin: 0 0 16px; }
 .skills-hero h1 { margin: 0 0 8px; }
 .skills-hero p { color: var(--muted); margin: 0; }
 .skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
@@ -486,10 +486,10 @@ body.nav-pending .tab.active:not(.pending-active) {
 }
 
 .skill-detail-page {
-  padding: 24px 0 56px;
+  padding: 16px 0 48px;
 }
 .skill-detail-hero {
-  margin: 20px 0 18px;
+  margin: 0 0 16px;
 }
 .skill-breadcrumb {
   margin-bottom: 10px;
@@ -601,7 +601,7 @@ body.nav-pending .tab.active:not(.pending-active) {
 }
 
 .account-panel {
-  margin: 18px 0 28px;
+  margin: 0;
   background: var(--panel);
 }
 .panel-title {
@@ -775,7 +775,7 @@ body.nav-pending .tab.active:not(.pending-active) {
   display: none !important;
 }
 
-.detail-grid { display: grid; grid-template-columns: 2.1fr 1fr; gap: 24px; padding: 24px 0 48px; }
+.detail-grid { display: grid; grid-template-columns: 2.1fr 1fr; gap: 24px; padding: 16px 0 48px; }
 .detail-card { background: var(--panel); border: 1px solid var(--border); padding: 24px; border-radius: 18px; box-shadow: var(--shadow); }
 .detail-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .detail-head-actions {
@@ -1170,7 +1170,9 @@ body.page-switching .detail-grid {
   .skills-page {
     display: grid;
     gap: var(--mobile-gap);
-    padding: 22px var(--mobile-content-x) calc(118px + env(safe-area-inset-bottom));
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 16px var(--mobile-content-x) calc(118px + env(safe-area-inset-bottom));
   }
   .skills-page > section,
   .skills-hero,
@@ -1299,11 +1301,12 @@ body.page-switching .detail-grid {
     margin: 0 auto;
     grid-template-columns: 1fr;
     gap: var(--mobile-gap);
-    padding: 20px var(--mobile-content-x) calc(118px + env(safe-area-inset-bottom));
+    padding: 16px var(--mobile-content-x) calc(118px + env(safe-area-inset-bottom));
   }
   .detail-main {
     display: grid;
     gap: var(--mobile-gap);
+    padding-inline: var(--mobile-panel-outer);
   }
   .detail-side { display: none; }
   .detail-actions {
@@ -1465,15 +1468,15 @@ body.page-switching .detail-grid {
 
 .quant-page,
 .quant-detail-page {
-  padding-top: 28px;
-  padding-bottom: 120px;
+  padding-top: 16px;
+  padding-bottom: 48px;
 }
 .quant-hero {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
   gap: 20px;
   align-items: stretch;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
 }
 .quant-kicker {
   color: var(--accent-2);
@@ -1751,14 +1754,32 @@ body.page-switching .detail-grid {
   }
 }
 @media (max-width: 640px) {
+  .skill-detail-page,
   .quant-page,
   .quant-detail-page {
-    padding-top: 18px;
-    padding-bottom: 108px;
+    display: grid;
+    gap: var(--mobile-gap);
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 16px var(--mobile-content-x) calc(118px + env(safe-area-inset-bottom));
   }
   .quant-hero h1,
   .quant-detail-head h1 {
     font-size: 28px;
+  }
+  .skill-detail-layout,
+  .quant-layout,
+  .quant-detail-layout {
+    gap: var(--mobile-gap);
+  }
+  .skill-detail-main,
+  .skill-detail-side,
+  .quant-feed,
+  .quant-side,
+  .quant-detail-main,
+  .quant-detail-side {
+    gap: var(--mobile-gap);
+    padding-inline: var(--mobile-panel-outer);
   }
   .quant-card,
   .quant-panel-block,
