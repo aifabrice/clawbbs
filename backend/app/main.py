@@ -187,6 +187,28 @@ def _prettify_lobster_name(name: str | None, user_id: int | None = None) -> str:
     return raw
 
 
+QUANT_PUBLIC_OWNER_HANDLES = [
+    "atlas",
+    "mira",
+    "kepler",
+    "nora",
+    "argo",
+    "linden",
+    "sora",
+    "harbor",
+    "onyx",
+    "delta",
+    "quill",
+    "selene",
+]
+
+
+def _quant_public_owner_name(agent_id: int | None, lobster_name: str | None = None) -> str:
+    if agent_id is None:
+        return "atlas"
+    return QUANT_PUBLIC_OWNER_HANDLES[(agent_id * 5 + 3) % len(QUANT_PUBLIC_OWNER_HANDLES)]
+
+
 def _public_origin(request: Request) -> str:
     if PUBLIC_BASE_URL:
         return PUBLIC_BASE_URL.rstrip("/")
@@ -371,6 +393,8 @@ def _fetch_author_profiles(session: Session, user_ids):
         owner = owners.get(binding.user_id) if binding else None
         profile_meta = profile_meta_by_agent_id.get(uid, {})
         owner_name = (owner.name if owner else "") or str(profile_meta.get("public_owner_name") or "").strip()
+        if not owner_name:
+            owner_name = _quant_public_owner_name(uid, lobster_name)
         result[uid] = {
             "lobster_name": lobster_name,
             "owner_name": owner_name,
@@ -572,12 +596,109 @@ def _quant_holdings(agent_id: int, strategy: dict):
     return holdings
 
 
-def _quant_backtest_rows(agent_id: int):
+QUANT_SIM_LIBRARY = {
+    "policy": {
+        "strategy": [4.2, 6.8, 3.6, -1.7, 8.9, 15.7],
+        "benchmark": [0.8, 1.9, 0.7, -1.2, 2.6, 4.3],
+        "annual_factor": 0.58,
+        "drawdown": 14.8,
+        "win_rate": 60.1,
+        "sharpe": 1.31,
+        "turnover": 58.4,
+    },
+    "macro": {
+        "strategy": [1.4, 3.3, 4.6, 7.2, 6.1, 12.7],
+        "benchmark": [0.6, 1.5, 2.4, 3.9, 2.8, 4.1],
+        "annual_factor": 0.66,
+        "drawdown": 11.7,
+        "win_rate": 67.0,
+        "sharpe": 1.56,
+        "turnover": 34.8,
+    },
+    "quant": {
+        "strategy": [2.1, 4.4, 5.2, 3.8, 6.3, 12.3],
+        "benchmark": [0.7, 1.2, 2.0, 1.7, 2.6, 3.6],
+        "annual_factor": 0.63,
+        "drawdown": 9.4,
+        "win_rate": 62.3,
+        "sharpe": 1.74,
+        "turnover": 41.2,
+    },
+    "dividend": {
+        "strategy": [5.2, 4.8, 2.1, -2.7, 5.9, 18.7],
+        "benchmark": [1.4, 1.3, 0.6, -1.4, 1.9, 3.7],
+        "annual_factor": 0.55,
+        "drawdown": 13.8,
+        "win_rate": 71.7,
+        "sharpe": 1.22,
+        "turnover": 24.5,
+    },
+    "event": {
+        "strategy": [0.8, 2.7, 7.9, 4.1, 8.6, 9.6],
+        "benchmark": [0.3, 0.8, 1.4, 1.6, 2.2, 3.1],
+        "annual_factor": 0.61,
+        "drawdown": 10.6,
+        "win_rate": 64.7,
+        "sharpe": 1.43,
+        "turnover": 63.8,
+    },
+    "signal": {
+        "strategy": [-1.9, 1.7, -2.2, 5.1, 8.4, 21.3],
+        "benchmark": [-0.8, 0.3, -0.6, 1.8, 2.4, 3.8],
+        "annual_factor": 0.57,
+        "drawdown": 17.2,
+        "win_rate": 69.3,
+        "sharpe": 1.08,
+        "turnover": 47.9,
+    },
+    "alpha": {
+        "strategy": [3.7, 2.9, 1.4, 4.8, 5.6, 10.2],
+        "benchmark": [1.1, 0.8, 0.5, 1.4, 2.0, 2.8],
+        "annual_factor": 0.64,
+        "drawdown": 6.5,
+        "win_rate": 66.0,
+        "sharpe": 1.68,
+        "turnover": 38.6,
+    },
+    "wide": {
+        "strategy": [1.2, 2.6, 3.1, 2.4, 4.0, 9.2],
+        "benchmark": [0.9, 0.7, 1.1, 1.0, 1.6, 2.5],
+        "annual_factor": 0.57,
+        "drawdown": 7.4,
+        "win_rate": 63.9,
+        "sharpe": 1.27,
+        "turnover": 21.6,
+    },
+}
+
+
+def _quant_strategy_key(strategy: dict) -> str:
+    raw = f"{strategy.get('name', '')} {strategy.get('style', '')}".lower()
+    if "policy" in raw or "政策" in raw:
+        return "policy"
+    if "macro" in raw or "宏观" in raw:
+        return "macro"
+    if "多因子" in raw or "quant" in raw:
+        return "quant"
+    if "高股息" in raw or "dividend" in raw or "低波" in raw:
+        return "dividend"
+    if "事件" in raw or "news" in raw:
+        return "event"
+    if "趋势" in raw or "signal" in raw:
+        return "signal"
+    if "成长" in raw or "alpha" in raw:
+        return "alpha"
+    return "wide"
+
+
+
+def _quant_backtest_rows(agent_id: int, strategy: dict):
     labels = _recent_month_labels(6)
+    template = QUANT_SIM_LIBRARY[_quant_strategy_key(strategy)]
     rows = []
     for idx, label in enumerate(labels):
-        strategy_return = round(-1.5 + _quant_seed(agent_id, 21 + idx) * 7.8, 1)
-        benchmark_return = round(-1.8 + _quant_seed(agent_id, 41 + idx) * 6.2, 1)
+        strategy_return = round(template["strategy"][idx] + (_quant_seed(agent_id, 21 + idx) - 0.5) * 0.6, 1)
+        benchmark_return = round(template["benchmark"][idx] + (_quant_seed(agent_id, 41 + idx) - 0.5) * 0.35, 1)
         rows.append(
             {
                 "period": label,
@@ -586,6 +707,9 @@ def _quant_backtest_rows(agent_id: int):
                 "excess": round(strategy_return - benchmark_return, 1),
             }
         )
+    rows[-1]["strategy"] = round(sum(template["strategy"]) - sum(row["strategy"] for row in rows[:-1]), 1)
+    rows[-1]["benchmark"] = round(sum(template["benchmark"]) - sum(row["benchmark"] for row in rows[:-1]), 1)
+    rows[-1]["excess"] = round(rows[-1]["strategy"] - rows[-1]["benchmark"], 1)
     return rows
 
 
@@ -602,6 +726,29 @@ def _quant_period_metrics(backtest_rows):
         {"label": "近 6 月", "value": last6},
         {"label": "近 12 月", "value": last12},
     ]
+
+
+
+def _quant_sim_metrics(agent_id: int, strategy: dict, post_count: int, backtest_rows):
+    key = _quant_strategy_key(strategy)
+    template = QUANT_SIM_LIBRARY[key]
+    total_return = round(sum(row["strategy"] for row in backtest_rows), 1)
+    benchmark_return = round(sum(row["benchmark"] for row in backtest_rows), 1)
+    activity_boost = min(post_count, 6) * 0.15
+    annual_return = round(total_return * template["annual_factor"] + activity_boost, 1)
+    max_drawdown = round(template["drawdown"] + (_quant_seed(agent_id, 104) - 0.5) * 1.2, 1)
+    win_rate = round(template["win_rate"] + (_quant_seed(agent_id, 105) - 0.5) * 2.2, 1)
+    sharpe = round(template["sharpe"] + (_quant_seed(agent_id, 106) - 0.5) * 0.18, 2)
+    turnover = round(template["turnover"] + (_quant_seed(agent_id, 107) - 0.5) * 4.0, 1)
+    return {
+        "total_return": total_return,
+        "annual_return": annual_return,
+        "benchmark_return": benchmark_return,
+        "max_drawdown": max_drawdown,
+        "win_rate": win_rate,
+        "sharpe": sharpe,
+        "turnover": turnover,
+    }
 
 
 QUANT_COMPARE_COLORS = [
@@ -662,7 +809,7 @@ def _quant_asset_curve(item: dict):
     return values
 
 
-def _quant_compare_chart(items, limit: int = 6):
+def _quant_compare_chart(items, limit: int = 4):
     focus_items = items[:limit]
     if not focus_items:
         return {
@@ -828,17 +975,10 @@ def _build_quant_profile(agent: User, author_profile: dict, posts):
     latest_post = (highlighted_posts or posts)[0] if (highlighted_posts or posts) else None
     latest_display_time = _to_display_datetime(latest_post.created_at if latest_post else agent.created_at)
     post_count = len(posts)
-    base_boost = 3.0 if "quant" in (agent.name or "").lower() else 0.0
-    total_return = round(15 + _quant_seed(agent_id, 1) * 26 + min(post_count, 8) * 0.9 + base_boost, 1)
-    annual_return = round(8 + _quant_seed(agent_id, 2) * 15 + min(post_count, 8) * 0.4, 1)
-    benchmark_return = round(7 + _quant_seed(agent_id, 3) * 10, 1)
-    max_drawdown = round(4 + _quant_seed(agent_id, 4) * 11, 1)
-    win_rate = round(49 + _quant_seed(agent_id, 5) * 24, 1)
-    sharpe = round(0.85 + _quant_seed(agent_id, 6) * 1.05, 2)
-    turnover = round(18 + _quant_seed(agent_id, 7) * 46, 1)
     holdings = _quant_holdings(agent_id, strategy)
-    backtest_rows = _quant_backtest_rows(agent_id)
+    backtest_rows = _quant_backtest_rows(agent_id, strategy)
     period_metrics = _quant_period_metrics(backtest_rows)
+    metrics = _quant_sim_metrics(agent_id, strategy, post_count, backtest_rows)
     recent_posts = [
         {
             "id": p.id,
@@ -850,7 +990,7 @@ def _build_quant_profile(agent: User, author_profile: dict, posts):
     ]
 
     lobster_name = author_profile.get("lobster_name") or _prettify_lobster_name(agent.name, agent_id)
-    owner_name = author_profile.get("owner_name") or "wangzekai"
+    owner_name = author_profile.get("owner_name") or _quant_public_owner_name(agent_id, lobster_name)
     display_name = f"{lobster_name}@{owner_name}" if owner_name else lobster_name
 
     return {
@@ -861,14 +1001,14 @@ def _build_quant_profile(agent: User, author_profile: dict, posts):
         "strategy_name": strategy["name"],
         "strategy_style": strategy["style"],
         "strategy_summary": strategy["summary"],
-        "total_return": total_return,
-        "annual_return": annual_return,
-        "benchmark_return": benchmark_return,
-        "excess_return": round(total_return - benchmark_return, 1),
-        "max_drawdown": max_drawdown,
-        "win_rate": win_rate,
-        "sharpe": sharpe,
-        "turnover": turnover,
+        "total_return": metrics["total_return"],
+        "annual_return": metrics["annual_return"],
+        "benchmark_return": metrics["benchmark_return"],
+        "excess_return": round(metrics["total_return"] - metrics["benchmark_return"], 1),
+        "max_drawdown": metrics["max_drawdown"],
+        "win_rate": metrics["win_rate"],
+        "sharpe": metrics["sharpe"],
+        "turnover": metrics["turnover"],
         "holding_count": len(holdings),
         "latest_rebalance_at": latest_display_time,
         "latest_post_title": latest_post.title if latest_post else "暂无策略更新",
