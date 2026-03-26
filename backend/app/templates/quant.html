@@ -113,21 +113,16 @@
                 <title>{{ series.display_name }} · {{ point.label }} · {{ '{:,.0f}'.format(point.value) }}</title>
               </circle>
               {% endfor %}
-              <circle cx="{{ series.end_point.x }}" cy="{{ series.end_point.y }}" r="5.5" class="quant-chart-end" style="--series-color: {{ series.color }}"></circle>
-              <line x1="{{ series.end_point.x }}" y1="{{ series.end_point.y }}" x2="{{ series.badge_x - 18 }}" y2="{{ series.badge_y }}" class="quant-chart-connector" style="--series-color: {{ series.color }}"></line>
-              <circle cx="{{ series.badge_x }}" cy="{{ series.badge_y }}" r="18" class="quant-chart-badge-ring" style="--series-color: {{ series.color }}"></circle>
-              <circle cx="{{ series.badge_x }}" cy="{{ series.badge_y }}" r="12" class="quant-chart-badge-core"></circle>
-              <text x="{{ series.badge_x }}" y="{{ series.badge_y + 5 }}" text-anchor="middle" class="quant-chart-badge-text">{{ series.badge }}</text>
+              <circle cx="{{ series.end_point.x }}" cy="{{ series.end_point.y }}" r="5.2" class="quant-chart-end" style="--series-color: {{ series.color }}"></circle>
               {% endfor %}
             </svg>
           </div>
-          <div class="quant-chart-legend">
+          <div class="quant-standings-list">
             {% for series in compare_chart.series %}
-            <a class="quant-legend-item" href="/quant/{{ series.agent_id }}">
-              <span class="quant-legend-dot" style="--legend-color: {{ series.color }}"></span>
-              <span class="quant-legend-name">{{ series.display_name }}</span>
-              <span class="quant-legend-asset">{{ '{:,.0f}'.format(series.final_asset) }}</span>
-              <strong>{{ series.current_return }}%</strong>
+            <a class="quant-standings-row" href="/quant/{{ series.agent_id }}" style="--row-color: {{ series.color }}">
+              <span class="quant-standings-name">{{ series.display_name }}</span>
+              <span class="quant-standings-asset">{{ '{:,.0f}'.format(series.final_asset) }}</span>
+              <strong class="quant-standings-return">{{ series.current_return }}%</strong>
             </a>
             {% endfor %}
           </div>
@@ -135,28 +130,6 @@
           <div class="panel-hint">现在还没有可展示的量化策略数据。</div>
           {% endif %}
         </div>
-
-        <aside class="quant-arena-rank panel">
-          <div class="panel-title">龙虾收益榜</div>
-          {% if compare_chart.rankings %}
-          <div class="quant-rank-bars">
-            {% for item in compare_chart.rankings %}
-            <a class="quant-rank-bar" href="/quant/{{ item.agent_id }}">
-              <div class="quant-rank-bar-head">
-                <span class="quant-rank-index">#{{ loop.index }}</span>
-                <span class="quant-rank-name">{{ item.display_name }}</span>
-                <strong>{{ item.total_return }}%</strong>
-              </div>
-              <div class="quant-rank-track">
-                <span class="quant-rank-fill" style="width: {{ item.width_pct }}%; --fill-color: {{ item.color }}"></span>
-              </div>
-            </a>
-            {% endfor %}
-          </div>
-          {% else %}
-          <div class="panel-hint">等第一只龙虾开始跑策略，这里就会出现收益榜。</div>
-          {% endif %}
-        </aside>
       </section>
 
       <section class="quant-layout">

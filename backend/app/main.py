@@ -631,29 +631,34 @@ def _quant_display_badge(display_name: str) -> str:
     return (head[:1] or "R").upper()
 
 
-def _quant_asset_curve(agent_id: int, total_return: float):
+def _quant_asset_curve(item: dict):
+    agent_id = item["agent_id"]
+    total_return = item["total_return"]
+    strategy_name = (item.get("strategy_name") or "").lower()
     start_asset = 1_000_000.0
     final_asset = round(start_asset * (1 + total_return / 100), 0)
-    timeline_count = len(QUANT_TIMELINE_LABELS)
-    values = [start_asset]
-    current = start_asset
-    progress_total = 0.0
 
-    for idx in range(1, timeline_count - 1):
-        progress_ratio = idx / (timeline_count - 1)
-        target_progress = progress_ratio * 0.92
-        delta_progress = max(0.06, target_progress - progress_total)
-        noise = (_quant_seed(agent_id, 220 + idx) - 0.5) * 0.18
-        if idx == 3:
-            noise += (_quant_seed(agent_id, 310) - 0.5) * 0.46
-        progress_total = min(0.94, progress_total + delta_progress + noise)
-        point_value = start_asset + (final_asset - start_asset) * progress_total
+    shape_library = {
+        "政策主题 / 双周调仓 / 6 股组合": [0.0, 0.08, 0.34, 0.31, 0.76, 1.0],
+        "宏观择时 / 月频调仓 / 6 股组合": [0.0, 0.05, 0.22, 0.54, 0.68, 1.0],
+        "多因子 / 周频调仓 / 6 股组合": [0.0, 0.09, 0.19, 0.47, 0.64, 1.0],
+        "高股息 / 低波 / 月频调仓 / 6 股组合": [0.0, 0.16, 0.38, 0.33, 0.59, 1.0],
+        "事件驱动 / 日频跟踪 / 6 股组合": [0.0, 0.06, 0.26, 0.42, 0.61, 1.0],
+        "趋势跟踪 / 日频监控 / 6 股组合": [0.0, 0.03, 0.18, 0.12, 0.56, 1.0],
+        "成长因子 / 双周调仓 / 6 股组合": [0.0, 0.04, 0.17, 0.28, 0.46, 1.0],
+        "宽基增强 / 周频调仓 / 6 股组合": [0.0, 0.02, 0.11, 0.21, 0.39, 1.0],
+    }
+    progress_points = shape_library.get(item.get("strategy_name"), [0.0, 0.06, 0.2, 0.38, 0.62, 1.0])
+
+    values = []
+    for idx, progress in enumerate(progress_points):
+        wobble = 0.0 if idx in {0, len(progress_points) - 1} else (_quant_seed(agent_id, 250 + idx) - 0.5) * 0.035
+        corrected = max(0.0, min(1.0, progress + wobble))
+        point_value = start_asset + (final_asset - start_asset) * corrected
         values.append(round(point_value, 0))
-        current = point_value
 
-    values.append(final_asset)
-    if len(values) != timeline_count:
-        values = values[: timeline_count - 1] + [final_asset]
+    values[0] = start_asset
+    values[-1] = final_asset
     return values
 
 
@@ -672,7 +677,7 @@ def _quant_compare_chart(items, limit: int = 6):
     all_values = []
 
     for idx, item in enumerate(focus_items):
-        values = _quant_asset_curve(item["agent_id"], item["total_return"])
+        values = _quant_asset_curve(item)
         all_values.extend(values)
         raw_series.append(
             {
@@ -702,7 +707,7 @@ def _quant_compare_chart(items, limit: int = 6):
     view_width = 760
     view_height = 360
     left = 92
-    right = 94
+    right = 36
     top = 28
     bottom = 54
     plot_width = view_width - left - right
@@ -761,8 +766,6 @@ def _quant_compare_chart(items, limit: int = 6):
                 "path": path,
                 "points": plotted_points,
                 "end_point": end_point,
-                "badge_x": round(min(view_width - 28, end_point["x"] + 40), 1),
-                "badge_y": end_point["y"],
             }
         )
 
