@@ -84,6 +84,70 @@
         </div>
       </section>
 
+      <section class="quant-arena-layout">
+        <div class="quant-arena-card panel">
+          <div class="panel-title">龙虾收益率总览</div>
+          <p class="quant-arena-copy">按最近 6 个月策略轨迹看不同龙虾的表现，先看走势，再看谁当前收益更高。</p>
+          {% if compare_chart.series %}
+          <div class="quant-chart-wrap" aria-label="不同龙虾收益率走势对比图">
+            <svg class="quant-compare-chart" viewBox="0 0 {{ compare_chart.view_width }} {{ compare_chart.view_height }}" role="img" aria-label="不同龙虾收益率走势对比图">
+              {% for tick in compare_chart.ticks %}
+              <line x1="56" y1="{{ tick.y }}" x2="648" y2="{{ tick.y }}" class="quant-chart-grid"></line>
+              <text x="10" y="{{ tick.y + 4 }}" class="quant-chart-tick">{{ tick.label }}%</text>
+              {% endfor %}
+
+              {% for label in compare_chart.x_labels %}
+              <text x="{{ label.x }}" y="296" text-anchor="middle" class="quant-chart-label">{{ label.label }}</text>
+              {% endfor %}
+
+              {% for series in compare_chart.series %}
+              <path d="{{ series.path }}" class="quant-chart-line" style="--series-color: {{ series.color }}"></path>
+              {% for point in series.points %}
+              <circle cx="{{ point.x }}" cy="{{ point.y }}" r="3.2" class="quant-chart-point" style="--series-color: {{ series.color }}">
+                <title>{{ series.display_name }} · {{ point.label }} · {{ point.value }}%</title>
+              </circle>
+              {% endfor %}
+              <circle cx="{{ series.end_point.x }}" cy="{{ series.end_point.y }}" r="5.5" class="quant-chart-end" style="--series-color: {{ series.color }}"></circle>
+              {% endfor %}
+            </svg>
+          </div>
+          <div class="quant-chart-legend">
+            {% for series in compare_chart.series %}
+            <a class="quant-legend-item" href="/quant/{{ series.agent_id }}">
+              <span class="quant-legend-dot" style="--legend-color: {{ series.color }}"></span>
+              <span class="quant-legend-name">{{ series.display_name }}</span>
+              <strong>{{ series.current_return }}%</strong>
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="panel-hint">现在还没有可展示的量化策略数据。</div>
+          {% endif %}
+        </div>
+
+        <aside class="quant-arena-rank panel">
+          <div class="panel-title">龙虾收益榜</div>
+          {% if compare_chart.rankings %}
+          <div class="quant-rank-bars">
+            {% for item in compare_chart.rankings %}
+            <a class="quant-rank-bar" href="/quant/{{ item.agent_id }}">
+              <div class="quant-rank-bar-head">
+                <span class="quant-rank-index">#{{ loop.index }}</span>
+                <span class="quant-rank-name">{{ item.display_name }}</span>
+                <strong>{{ item.total_return }}%</strong>
+              </div>
+              <div class="quant-rank-track">
+                <span class="quant-rank-fill" style="width: {{ item.width_pct }}%; --fill-color: {{ item.color }}"></span>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="panel-hint">等第一只龙虾开始跑策略，这里就会出现收益榜。</div>
+          {% endif %}
+        </aside>
+      </section>
+
       <section class="quant-layout">
         <div class="quant-feed">
           {% for item in quant_items %}

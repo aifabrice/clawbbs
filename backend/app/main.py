@@ -604,6 +604,151 @@ def _quant_period_metrics(backtest_rows):
     ]
 
 
+QUANT_COMPARE_COLORS = [
+    "#c6862c",
+    "#8e5f15",
+    "#2d7b5e",
+    "#476f91",
+    "#955f82",
+    "#6c59a7",
+    "#b95a3c",
+    "#4a8c9b",
+]
+
+
+def _quant_curve_points(backtest_rows):
+    labels = ["起点"]
+    values = [0.0]
+    cumulative = 0.0
+    for row in backtest_rows:
+        cumulative = round(cumulative + row["strategy"], 1)
+        labels.append(row["period"])
+        values.append(cumulative)
+    return labels, values
+
+
+def _quant_compare_chart(items, limit: int = 6):
+    focus_items = items[:limit]
+    if not focus_items:
+        return {
+            "series": [],
+            "ticks": [],
+            "x_labels": [],
+            "rankings": [],
+        }
+
+    raw_series = []
+    min_value = 0.0
+    max_value = 0.0
+    x_labels = []
+
+    for idx, item in enumerate(focus_items):
+        labels, values = _quant_curve_points(item["backtest_rows"])
+        if not x_labels:
+            x_labels = labels
+        min_value = min(min_value, *values)
+        max_value = max(max_value, *values)
+        raw_series.append(
+            {
+                "agent_id": item["agent_id"],
+                "display_name": item["display_name"],
+                "current_return": item["total_return"],
+                "values": values,
+                "color": QUANT_COMPARE_COLORS[idx % len(QUANT_COMPARE_COLORS)],
+            }
+        )
+
+    if max_value == min_value:
+        max_value += 1.0
+        min_value -= 1.0
+    padding = max(2.0, round((max_value - min_value) * 0.14, 1))
+    min_value -= padding
+    max_value += padding
+
+    view_width = 720
+    view_height = 320
+    left = 56
+    right = 72
+    top = 20
+    bottom = 42
+    plot_width = view_width - left - right
+    plot_height = view_height - top - bottom
+    point_count = len(x_labels)
+    steps = max(point_count - 1, 1)
+
+    def x_at(index: int) -> float:
+        return left + plot_width * index / steps
+
+    def y_at(value: float) -> float:
+        ratio = (value - min_value) / (max_value - min_value)
+        return top + plot_height * (1 - ratio)
+
+    ticks = []
+    tick_count = 5
+    for idx in range(tick_count):
+        ratio = idx / (tick_count - 1)
+        tick_value = round(max_value - (max_value - min_value) * ratio, 1)
+        ticks.append(
+            {
+                "label": tick_value,
+                "y": round(y_at(tick_value), 1),
+            }
+        )
+
+    x_axis_labels = [
+        {
+            "label": label,
+            "x": round(x_at(idx), 1),
+        }
+        for idx, label in enumerate(x_labels)
+    ]
+
+    series = []
+    for item in raw_series:
+        plotted_points = [
+            {
+                "x": round(x_at(idx), 1),
+                "y": round(y_at(value), 1),
+                "value": value,
+                "label": x_labels[idx],
+            }
+            for idx, value in enumerate(item["values"])
+        ]
+        path = "M " + " L ".join(f"{point['x']} {point['y']}" for point in plotted_points)
+        series.append(
+            {
+                "agent_id": item["agent_id"],
+                "display_name": item["display_name"],
+                "current_return": item["current_return"],
+                "color": item["color"],
+                "path": path,
+                "points": plotted_points,
+                "end_point": plotted_points[-1],
+            }
+        )
+
+    peak_return = max((item["total_return"] for item in items), default=0.0)
+    rankings = [
+        {
+            "agent_id": item["agent_id"],
+            "display_name": item["display_name"],
+            "total_return": item["total_return"],
+            "width_pct": round((item["total_return"] / peak_return) * 100, 1) if peak_return > 0 else 0.0,
+            "color": QUANT_COMPARE_COLORS[idx % len(QUANT_COMPARE_COLORS)],
+        }
+        for idx, item in enumerate(items[:8])
+    ]
+
+    return {
+        "series": series,
+        "ticks": ticks,
+        "x_labels": x_axis_labels,
+        "rankings": rankings,
+        "view_width": view_width,
+        "view_height": view_height,
+    }
+
+
 def _quant_rebalance_log(agent_id: int, holdings, latest_display_time: str):
     entries = []
     for idx, holding in enumerate(holdings[:3]):
@@ -1054,6 +1199,7 @@ def quant_page(request: Request):
         _, stats = _shared_square_stats(session)
         quant_items, quant_summary = _build_quant_feed(session)
     leaderboard = quant_items[:5]
+    compare_chart = _quant_compare_chart(quant_items)
     return templates.TemplateResponse(
         "quant.html",
         {
@@ -1062,6 +1208,7 @@ def quant_page(request: Request):
             "quant_items": quant_items,
             "quant_summary": quant_summary,
             "leaderboard": leaderboard,
+            "compare_chart": compare_chart,
         },
     )
 
