@@ -616,15 +616,45 @@ QUANT_COMPARE_COLORS = [
 ]
 
 
-def _quant_curve_points(backtest_rows):
-    labels = ["起点"]
-    values = [0.0]
-    cumulative = 0.0
-    for row in backtest_rows:
-        cumulative = round(cumulative + row["strategy"], 1)
-        labels.append(row["period"])
-        values.append(cumulative)
-    return labels, values
+QUANT_TIMELINE_LABELS = [
+    "03/23 13:10",
+    "03/24 12:20",
+    "03/25 07:50",
+    "03/25 13:20",
+    "03/25 16:40",
+    "03/26 01:40",
+]
+
+
+def _quant_display_badge(display_name: str) -> str:
+    head = (display_name or "R").split("@", 1)[0].strip()
+    return (head[:1] or "R").upper()
+
+
+def _quant_asset_curve(agent_id: int, total_return: float):
+    start_asset = 1_000_000.0
+    final_asset = round(start_asset * (1 + total_return / 100), 0)
+    timeline_count = len(QUANT_TIMELINE_LABELS)
+    values = [start_asset]
+    current = start_asset
+    progress_total = 0.0
+
+    for idx in range(1, timeline_count - 1):
+        progress_ratio = idx / (timeline_count - 1)
+        target_progress = progress_ratio * 0.92
+        delta_progress = max(0.06, target_progress - progress_total)
+        noise = (_quant_seed(agent_id, 220 + idx) - 0.5) * 0.18
+        if idx == 3:
+            noise += (_quant_seed(agent_id, 310) - 0.5) * 0.46
+        progress_total = min(0.94, progress_total + delta_progress + noise)
+        point_value = start_asset + (final_asset - start_asset) * progress_total
+        values.append(round(point_value, 0))
+        current = point_value
+
+    values.append(final_asset)
+    if len(values) != timeline_count:
+        values = values[: timeline_count - 1] + [final_asset]
+    return values
 
 
 def _quant_compare_chart(items, limit: int = 6):
@@ -635,62 +665,66 @@ def _quant_compare_chart(items, limit: int = 6):
             "ticks": [],
             "x_labels": [],
             "rankings": [],
+            "headline": {},
         }
 
     raw_series = []
-    min_value = 0.0
-    max_value = 0.0
-    x_labels = []
+    all_values = []
 
     for idx, item in enumerate(focus_items):
-        labels, values = _quant_curve_points(item["backtest_rows"])
-        if not x_labels:
-            x_labels = labels
-        min_value = min(min_value, *values)
-        max_value = max(max_value, *values)
+        values = _quant_asset_curve(item["agent_id"], item["total_return"])
+        all_values.extend(values)
         raw_series.append(
             {
                 "agent_id": item["agent_id"],
                 "display_name": item["display_name"],
+                "badge": _quant_display_badge(item["display_name"]),
                 "current_return": item["total_return"],
+                "final_asset": int(values[-1]),
                 "values": values,
                 "color": QUANT_COMPARE_COLORS[idx % len(QUANT_COMPARE_COLORS)],
             }
         )
 
+    min_value = min(all_values)
+    max_value = max(all_values)
     if max_value == min_value:
-        max_value += 1.0
-        min_value -= 1.0
-    padding = max(2.0, round((max_value - min_value) * 0.14, 1))
-    min_value -= padding
-    max_value += padding
+        max_value += 1000
+        min_value -= 1000
 
-    view_width = 720
-    view_height = 320
-    left = 56
-    right = 72
-    top = 20
-    bottom = 42
+    value_range = max_value - min_value
+    rounded_step = max(10_000, round(value_range / 4 / 10_000) * 10_000)
+    axis_min = int((min_value // rounded_step) * rounded_step)
+    axis_max = int(((max_value + rounded_step - 1) // rounded_step) * rounded_step)
+    axis_max += rounded_step
+    axis_min = min(axis_min, 900_000)
+
+    view_width = 760
+    view_height = 360
+    left = 92
+    right = 94
+    top = 28
+    bottom = 54
     plot_width = view_width - left - right
     plot_height = view_height - top - bottom
-    point_count = len(x_labels)
+    point_count = len(QUANT_TIMELINE_LABELS)
     steps = max(point_count - 1, 1)
 
     def x_at(index: int) -> float:
         return left + plot_width * index / steps
 
     def y_at(value: float) -> float:
-        ratio = (value - min_value) / (max_value - min_value)
+        ratio = (value - axis_min) / (axis_max - axis_min)
         return top + plot_height * (1 - ratio)
 
     ticks = []
     tick_count = 5
+    tick_gap = (axis_max - axis_min) / (tick_count - 1)
     for idx in range(tick_count):
-        ratio = idx / (tick_count - 1)
-        tick_value = round(max_value - (max_value - min_value) * ratio, 1)
+        tick_value = int(axis_max - tick_gap * idx)
         ticks.append(
             {
-                "label": tick_value,
+                "label": f"{tick_value:,.0f}",
                 "y": round(y_at(tick_value), 1),
             }
         )
@@ -700,7 +734,7 @@ def _quant_compare_chart(items, limit: int = 6):
             "label": label,
             "x": round(x_at(idx), 1),
         }
-        for idx, label in enumerate(x_labels)
+        for idx, label in enumerate(QUANT_TIMELINE_LABELS)
     ]
 
     series = []
@@ -709,21 +743,26 @@ def _quant_compare_chart(items, limit: int = 6):
             {
                 "x": round(x_at(idx), 1),
                 "y": round(y_at(value), 1),
-                "value": value,
-                "label": x_labels[idx],
+                "value": int(value),
+                "label": QUANT_TIMELINE_LABELS[idx],
             }
             for idx, value in enumerate(item["values"])
         ]
         path = "M " + " L ".join(f"{point['x']} {point['y']}" for point in plotted_points)
+        end_point = plotted_points[-1]
         series.append(
             {
                 "agent_id": item["agent_id"],
                 "display_name": item["display_name"],
+                "badge": item["badge"],
                 "current_return": item["current_return"],
+                "final_asset": item["final_asset"],
                 "color": item["color"],
                 "path": path,
                 "points": plotted_points,
-                "end_point": plotted_points[-1],
+                "end_point": end_point,
+                "badge_x": round(min(view_width - 28, end_point["x"] + 40), 1),
+                "badge_y": end_point["y"],
             }
         )
 
@@ -739,13 +778,24 @@ def _quant_compare_chart(items, limit: int = 6):
         for idx, item in enumerate(items[:8])
     ]
 
+    leader = items[0]
+    headline = {
+        "title": "账户总资产",
+        "subtitle": "美股市场状态：已收盘",
+        "leader_name": leader["display_name"],
+        "leader_return": leader["total_return"],
+    }
+
     return {
         "series": series,
         "ticks": ticks,
         "x_labels": x_axis_labels,
         "rankings": rankings,
+        "headline": headline,
         "view_width": view_width,
         "view_height": view_height,
+        "plot_left": left,
+        "plot_right": view_width - right,
     }
 
 

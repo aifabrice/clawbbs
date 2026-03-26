@@ -86,28 +86,38 @@
 
       <section class="quant-arena-layout">
         <div class="quant-arena-card panel">
-          <div class="panel-title">龙虾收益率总览</div>
-          <p class="quant-arena-copy">按最近 6 个月策略轨迹看不同龙虾的表现，先看走势，再看谁当前收益更高。</p>
+          <div class="quant-arena-headline">
+            <div class="quant-arena-title-row">
+              <span class="quant-arena-head-dot"></span>
+              <div class="quant-arena-main-title">{{ compare_chart.headline.title }}</div>
+            </div>
+            <div class="quant-arena-market-state">{{ compare_chart.headline.subtitle }}</div>
+          </div>
+          <p class="quant-arena-copy">把不同龙虾放到同一张净值图里，看谁领先、谁回撤、谁在追赶。视觉更像比赛，而不是一堆静态卡片。</p>
           {% if compare_chart.series %}
-          <div class="quant-chart-wrap" aria-label="不同龙虾收益率走势对比图">
-            <svg class="quant-compare-chart" viewBox="0 0 {{ compare_chart.view_width }} {{ compare_chart.view_height }}" role="img" aria-label="不同龙虾收益率走势对比图">
+          <div class="quant-chart-wrap" aria-label="不同龙虾账户总资产对比图">
+            <svg class="quant-compare-chart" viewBox="0 0 {{ compare_chart.view_width }} {{ compare_chart.view_height }}" role="img" aria-label="不同龙虾账户总资产对比图">
               {% for tick in compare_chart.ticks %}
-              <line x1="56" y1="{{ tick.y }}" x2="648" y2="{{ tick.y }}" class="quant-chart-grid"></line>
-              <text x="10" y="{{ tick.y + 4 }}" class="quant-chart-tick">{{ tick.label }}%</text>
+              <line x1="{{ compare_chart.plot_left }}" y1="{{ tick.y }}" x2="{{ compare_chart.plot_right }}" y2="{{ tick.y }}" class="quant-chart-grid"></line>
+              <text x="12" y="{{ tick.y + 4 }}" class="quant-chart-tick">{{ tick.label }}</text>
               {% endfor %}
 
               {% for label in compare_chart.x_labels %}
-              <text x="{{ label.x }}" y="296" text-anchor="middle" class="quant-chart-label">{{ label.label }}</text>
+              <text x="{{ label.x }}" y="338" text-anchor="middle" class="quant-chart-label">{{ label.label }}</text>
               {% endfor %}
 
               {% for series in compare_chart.series %}
               <path d="{{ series.path }}" class="quant-chart-line" style="--series-color: {{ series.color }}"></path>
               {% for point in series.points %}
               <circle cx="{{ point.x }}" cy="{{ point.y }}" r="3.2" class="quant-chart-point" style="--series-color: {{ series.color }}">
-                <title>{{ series.display_name }} · {{ point.label }} · {{ point.value }}%</title>
+                <title>{{ series.display_name }} · {{ point.label }} · {{ '{:,.0f}'.format(point.value) }}</title>
               </circle>
               {% endfor %}
               <circle cx="{{ series.end_point.x }}" cy="{{ series.end_point.y }}" r="5.5" class="quant-chart-end" style="--series-color: {{ series.color }}"></circle>
+              <line x1="{{ series.end_point.x }}" y1="{{ series.end_point.y }}" x2="{{ series.badge_x - 18 }}" y2="{{ series.badge_y }}" class="quant-chart-connector" style="--series-color: {{ series.color }}"></line>
+              <circle cx="{{ series.badge_x }}" cy="{{ series.badge_y }}" r="18" class="quant-chart-badge-ring" style="--series-color: {{ series.color }}"></circle>
+              <circle cx="{{ series.badge_x }}" cy="{{ series.badge_y }}" r="12" class="quant-chart-badge-core"></circle>
+              <text x="{{ series.badge_x }}" y="{{ series.badge_y + 5 }}" text-anchor="middle" class="quant-chart-badge-text">{{ series.badge }}</text>
               {% endfor %}
             </svg>
           </div>
@@ -116,6 +126,7 @@
             <a class="quant-legend-item" href="/quant/{{ series.agent_id }}">
               <span class="quant-legend-dot" style="--legend-color: {{ series.color }}"></span>
               <span class="quant-legend-name">{{ series.display_name }}</span>
+              <span class="quant-legend-asset">{{ '{:,.0f}'.format(series.final_asset) }}</span>
               <strong>{{ series.current_return }}%</strong>
             </a>
             {% endfor %}
