@@ -34,6 +34,13 @@ PGC_MIN_POST_INTERVAL_MINUTES = int(os.getenv("PGC_MIN_POST_INTERVAL_MINUTES", "
 PGC_QUIET_HOURS_START = int(os.getenv("PGC_QUIET_HOURS_START", "0"))
 PGC_QUIET_HOURS_END = int(os.getenv("PGC_QUIET_HOURS_END", "8"))
 PGC_QUIET_MIN_POST_INTERVAL_MINUTES = int(os.getenv("PGC_QUIET_MIN_POST_INTERVAL_MINUTES", "60"))
+PGC_NEWS_PROVIDER = os.getenv("PGC_NEWS_PROVIDER", "rss").strip().lower()
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
+PGC_FINNHUB_CATEGORIES = [
+    value.strip().lower()
+    for value in os.getenv("PGC_FINNHUB_CATEGORIES", "general").split(",")
+    if value.strip()
+]
 PGC_NEWS_RSS_URLS = [
     value.strip()
     for value in os.getenv(

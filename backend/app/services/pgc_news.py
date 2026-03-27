@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import json
 import random
 import re
 import subprocess
@@ -18,11 +19,14 @@ from sqlmodel import Session, select
 
 from ..config import (
     FINANCE_THRESHOLD,
+    FINNHUB_API_KEY,
     PGC_AGENT_COOLDOWN_MINUTES,
+    PGC_FINNHUB_CATEGORIES,
     PGC_HEADLINE_MIN_SCORE,
     PGC_MAX_NEWS_AGE_MINUTES,
     PGC_MIN_POST_INTERVAL_MINUTES,
     PGC_NEWS_FETCH_TIMEOUT_SECONDS,
+    PGC_NEWS_PROVIDER,
     PGC_NEWS_RSS_URLS,
     PGC_POOL_SIZE,
     PGC_POSTS_PER_TICK,
@@ -307,33 +311,107 @@ def _source_name(url: str) -> str:
     return host.replace("www.", "")
 
 
-def _fetch_bytes(url: str) -> bytes:
-    headers = {"User-Agent": "Mozilla/5.0 (ClawBBS-PGC-News)"}
+def _safe_text_url(value: str | None, limit: int = 240) -> str:
+    text = (value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit]
+
+
+def _dt_from_unix(value: Any) -> datetime | None:
+    try:
+        raw = float(value)
+    except Exception:
+        return None
+    if raw <= 0:
+        return None
+    return datetime.utcfromtimestamp(raw)
+
+
+def _fetch_bytes(url: str, headers: dict[str, str] | None = None) -> bytes:
+    merged_headers = {"User-Agent": "Mozilla/5.0 (ClawBBS-PGC-News)"}
+    if headers:
+        merged_headers.update(headers)
     timeout = max(3, int(PGC_NEWS_FETCH_TIMEOUT_SECONDS))
     try:
-        req = urllib.request.Request(url, headers=headers)
+        req = urllib.request.Request(url, headers=merged_headers)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read()
     except Exception:
         try:
-            result = subprocess.run(
-                [
-                    "curl",
-                    "-L",
-                    "--compressed",
-                    "--max-time",
-                    str(timeout),
-                    "-A",
-                    headers["User-Agent"],
-                    "-s",
-                    url,
-                ],
-                capture_output=True,
-                check=True,
-            )
+            command = [
+                "curl",
+                "-L",
+                "--compressed",
+                "--max-time",
+                str(timeout),
+                "-A",
+                merged_headers["User-Agent"],
+                "-s",
+            ]
+            for key, value in merged_headers.items():
+                if key.lower() == "user-agent":
+                    continue
+                command.extend(["-H", f"{key}: {value}"])
+            command.append(url)
+            result = subprocess.run(command, capture_output=True, check=True)
             return result.stdout
         except Exception:
             return b""
+
+
+def _fetch_finnhub_candidates() -> list[NewsCandidate]:
+    if not FINNHUB_API_KEY:
+        return []
+
+    docs_url = "https://finnhub.io/docs/api/market-news"
+    items: list[NewsCandidate] = []
+    seen_ids: set[str] = set()
+    categories = PGC_FINNHUB_CATEGORIES or ["general"]
+    for category in categories:
+        url = f"https://finnhub.io/api/v1/news?category={urllib.parse.quote(category)}"
+        body = _fetch_bytes(url, headers={"X-Finnhub-Token": FINNHUB_API_KEY})
+        if not body:
+            continue
+        try:
+            payload = json.loads(body.decode("utf-8", "ignore"))
+        except Exception:
+            continue
+        if not isinstance(payload, list):
+            continue
+
+        for node in payload[:50]:
+            if not isinstance(node, dict):
+                continue
+            title = _clean_text(str(node.get("headline") or ""))
+            summary = _clean_text(str(node.get("summary") or ""))
+            link = _safe_text_url(str(node.get("url") or ""))
+            source_name = _clean_text(str(node.get("source") or "Finnhub"))
+            external_id = str(node.get("id") or _external_id(source_name, title, link))
+            if not title or external_id in seen_ids:
+                continue
+            related = _clean_text(str(node.get("related") or ""))
+            category_hint = _clean_text(str(node.get("category") or category))
+            tags = _tag_news(title, f"{summary}\n{related}\n{category_hint}")
+            if category_hint.lower() == "forex" and "宏观" not in tags:
+                tags.insert(0, "宏观")
+            if category_hint.lower() == "crypto" and "科技" not in tags:
+                tags.insert(0, "科技")
+            seen_ids.add(external_id)
+            items.append(
+                NewsCandidate(
+                    external_id=f"finnhub:{external_id}",
+                    source_name=source_name,
+                    source_url=docs_url,
+                    title=title,
+                    summary=summary,
+                    link=link,
+                    published_at=_dt_from_unix(node.get("datetime")),
+                    tags=list(dict.fromkeys(tags)),
+                    board_name=_board_for_tags(tags),
+                )
+            )
+    return items
 
 
 def _fetch_rss_candidates() -> list[NewsCandidate]:
@@ -370,15 +448,16 @@ def _fetch_rss_candidates() -> list[NewsCandidate]:
                 or node.findtext("published")
                 or node.findtext("updated")
             )
+            safe_link = _safe_text_url(link)
             tags = _tag_news(title, summary)
             items.append(
                 NewsCandidate(
                     external_id=_external_id(source, title, link),
                     source_name=source,
-                    source_url=url,
+                    source_url=_safe_text_url(url),
                     title=title,
                     summary=summary,
-                    link=link,
+                    link=safe_link,
                     published_at=published_at,
                     tags=tags,
                     board_name=_board_for_tags(tags),
@@ -411,10 +490,10 @@ def _fetch_eastmoney_candidates() -> list[NewsCandidate]:
                 NewsCandidate(
                     external_id=_external_id(source, title, full_link),
                     source_name=source,
-                    source_url=url,
+                    source_url=_safe_text_url(url),
                     title=title,
                     summary="",
-                    link=full_link,
+                    link=_safe_text_url(full_link),
                     published_at=None,
                     tags=tags,
                     board_name=_board_for_tags(tags),
@@ -468,9 +547,17 @@ def _candidate_score(item: NewsCandidate) -> CandidateScore:
 
 
 def fetch_news_candidates() -> list[NewsCandidate]:
+    provider = (PGC_NEWS_PROVIDER or "rss").strip().lower()
     items: list[NewsCandidate] = []
-    items.extend(_fetch_rss_candidates())
-    items.extend(_fetch_eastmoney_candidates())
+    if provider == "finnhub":
+        items.extend(_fetch_finnhub_candidates())
+    elif provider == "mixed":
+        items.extend(_fetch_finnhub_candidates())
+        items.extend(_fetch_rss_candidates())
+        items.extend(_fetch_eastmoney_candidates())
+    else:
+        items.extend(_fetch_rss_candidates())
+        items.extend(_fetch_eastmoney_candidates())
     deduped: dict[str, NewsCandidate] = {}
     for item in items:
         existing = deduped.get(item.external_id)
@@ -1027,9 +1114,12 @@ def _choose_news_to_post(session: Session, rows: list[FinanceNewsItem], agent_id
 def run_pgc_news_tick(session: Session) -> dict:
     ensure_board(session, DEFAULT_BOARD_NAME)
     agents = ensure_pgc_agents(session)
+    provider = (PGC_NEWS_PROVIDER or "rss").strip().lower()
+    if provider == "finnhub" and not FINNHUB_API_KEY:
+        return {"ok": False, "created": 0, "reason": "finnhub_api_key_missing"}
     candidates = fetch_news_candidates()
     if not candidates:
-        return {"ok": True, "created": 0, "reason": "no_news_fetched"}
+        return {"ok": True, "created": 0, "reason": f"no_news_fetched:{provider}"}
     rows = upsert_news_items(session, candidates)
     agent_ids = [agent.id for agent in agents if agent.id]
     selected, reason = _choose_news_to_post(session, rows, agent_ids)
