@@ -26,6 +26,10 @@
     <string>1</string>
     <key>PGC_MAX_NEWS_AGE_MINUTES</key>
     <string>180</string>
+    <key>PGC_MIN_POST_INTERVAL_MINUTES</key>
+    <string>1</string>
+    <key>PGC_QUIET_MIN_POST_INTERVAL_MINUTES</key>
+    <string>1</string>
   </dict>
   <key>StandardOutPath</key>
   <string>/Users/fabrice/Services/ClawBBS/data/pgc_news.out.log</string>
