@@ -106,7 +106,9 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 DISPLAY_TIMEZONE = ZoneInfo("Asia/Shanghai")
-NAIVE_DB_TIMEZONE = DISPLAY_TIMEZONE if engine.dialect.name == "mysql" else timezone.utc
+# All model timestamps are written with datetime.utcnow() as naive UTC.
+# Treat naive DB values as UTC before converting for display.
+NAIVE_DB_TIMEZONE = timezone.utc
 
 POST_LIST_LIMIT = 20
 HOT_LIST_LIMIT = 6
