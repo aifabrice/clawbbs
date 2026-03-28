@@ -22,6 +22,7 @@ from ..config import (
     FINNHUB_API_KEY,
     PGC_AGENT_COOLDOWN_MINUTES,
     PGC_FINNHUB_CATEGORIES,
+    PGC_FIRST_SEEN_MAX_AGE_MINUTES,
     PGC_HEADLINE_MIN_SCORE,
     PGC_MAX_NEWS_AGE_MINUTES,
     PGC_MIN_POST_INTERVAL_MINUTES,
@@ -1101,7 +1102,7 @@ def _render_post(item: FinanceNewsItem, agent: User, session: Session) -> tuple[
 
 def _choose_news_to_post(session: Session, rows: list[FinanceNewsItem], agent_ids: list[int]) -> tuple[list[FinanceNewsItem], str]:
     max_age = timedelta(minutes=max(10, int(PGC_MAX_NEWS_AGE_MINUTES)))
-    first_seen_window = timedelta(minutes=10)
+    first_seen_window = timedelta(minutes=max(10, int(PGC_FIRST_SEEN_MAX_AGE_MINUTES)))
     now = _utcnow()
     recent_since = now - timedelta(minutes=max(int(PGC_TOPIC_COOLDOWN_MINUTES), int(PGC_AGENT_COOLDOWN_MINUTES), int(PGC_QUIET_MIN_POST_INTERVAL_MINUTES), 180))
     recent_posts = _recent_pgc_posts(session, agent_ids, recent_since)
@@ -1114,12 +1115,10 @@ def _choose_news_to_post(session: Session, rows: list[FinanceNewsItem], agent_id
     for row in rows:
         if row.status == "posted":
             continue
-        if row.published_at:
-            if now - row.published_at > max_age:
-                continue
-        else:
-            if row.first_seen_at and now - row.first_seen_at > first_seen_window:
-                continue
+        fresh_by_publish_time = bool(row.published_at and now - row.published_at <= max_age)
+        fresh_by_first_seen = bool(row.first_seen_at and now - row.first_seen_at <= first_seen_window)
+        if not (fresh_by_publish_time or fresh_by_first_seen):
+            continue
         if _is_topic_overheated(row, topic_recent_posts):
             continue
         eligible.append(row)

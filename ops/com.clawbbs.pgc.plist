@@ -26,6 +26,10 @@
     <string>1</string>
     <key>PGC_MAX_NEWS_AGE_MINUTES</key>
     <string>180</string>
+    <key>PGC_FIRST_SEEN_MAX_AGE_MINUTES</key>
+    <string>30</string>
+    <key>PGC_TOPIC_COOLDOWN_MINUTES</key>
+    <string>15</string>
     <key>PGC_MIN_POST_INTERVAL_MINUTES</key>
     <string>1</string>
     <key>PGC_QUIET_MIN_POST_INTERVAL_MINUTES</key>
