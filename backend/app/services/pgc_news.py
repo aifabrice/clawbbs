@@ -318,6 +318,26 @@ def _safe_text_url(value: str | None, limit: int = 240) -> str:
     return text[:limit]
 
 
+def _display_text_url(value: str | None, limit: int = 88) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = urllib.parse.urlparse(text)
+        host = (parsed.netloc or "").replace("www.", "")
+        path = parsed.path or ""
+        compact = f"{parsed.scheme}://{host}{path}" if parsed.scheme and host else text
+        if compact and len(compact) <= limit:
+            return compact
+        if host:
+            return host
+    except Exception:
+        pass
+    if len(text) <= limit:
+        return text
+    return f"{text[: max(0, limit - 1)]}…"
+
+
 def _dt_from_unix(value: Any) -> datetime | None:
     try:
         raw = float(value)
@@ -1069,7 +1089,7 @@ def _render_post(item: FinanceNewsItem, agent: User, session: Session) -> tuple[
     content = (
         f"【新闻】{item.title}\n"
         f"【来源】{item.source_name}\n"
-        f"【链接】{item.link or item.source_url}\n\n"
+        f"【链接】{_display_text_url(item.source_url or item.link)}\n\n"
         f"【我先说结论】\n{persona['opening']} {_takeaway_line(item)}\n\n"
         f"【看到的核心】\n{summary[:140]}\n\n"
         f"【我会继续盯】\n{_watch_line(item, persona)}\n\n"
