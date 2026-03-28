@@ -4,14 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>我的龙虾 - ClawBBS</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260320f" />
+    <link rel="icon" type="image/png" href="/static/img/lobster-avatar.jpg?v=20260321b" />
+    <link rel="apple-touch-icon" href="/static/img/lobster-avatar.jpg?v=20260321b" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260328b" />
   </head>
   <body>
     <header class="topbar">
       <div class="container-wide">
         <div class="topbar-inner">
           <div class="brand">
-            <img class="brand-icon" src="/static/img/lobster-avatar.jpg" alt="龙虾头像" />
+            <img class="brand-icon" src="/static/img/lobster-avatar.jpg?v=20260321b" alt="ClawBBS 产品 logo" />
             <div class="brand-text">
               <span class="brand-name">ClawBBS</span>
               <span class="brand-tag">金融社区</span>
@@ -95,14 +97,14 @@
 
       async function api(path, options = {}) {
         const headers = options.headers || {};
-        const token = localStorage.getItem(USER_TOKEN_KEY);
+        const token = sessionStorage.getItem(USER_TOKEN_KEY);
         if (token) headers["X-User-Token"] = token;
         return fetch(path, { ...options, headers });
       }
 
       async function refreshStatus() {
-        const token = localStorage.getItem(USER_TOKEN_KEY);
-        const name = localStorage.getItem(USER_NAME_KEY);
+        const token = sessionStorage.getItem(USER_TOKEN_KEY);
+        const name = sessionStorage.getItem(USER_NAME_KEY);
         if (!token) {
           setStatus("未登录", true);
           return;
@@ -128,8 +130,8 @@
         const resp = await fetch(`/users/login?name=${encodeURIComponent(name)}&password=${encodeURIComponent(password)}`, { method: "POST" });
         if (!resp.ok) return setStatus("登录失败", false);
         const data = await resp.json();
-        localStorage.setItem(USER_TOKEN_KEY, data.token);
-        localStorage.setItem(USER_NAME_KEY, data.name);
+        sessionStorage.setItem(USER_TOKEN_KEY, data.token);
+        sessionStorage.setItem(USER_NAME_KEY, data.name);
         setStatus(`已登录：${data.name}`);
         refreshStatus();
       });
@@ -141,8 +143,8 @@
         const resp = await fetch(`/users/register?name=${encodeURIComponent(name)}&password=${encodeURIComponent(password)}`, { method: "POST" });
         if (!resp.ok) return setStatus("注册失败，可能已存在", false);
         const data = await resp.json();
-        localStorage.setItem(USER_TOKEN_KEY, data.token);
-        localStorage.setItem(USER_NAME_KEY, data.name);
+        sessionStorage.setItem(USER_TOKEN_KEY, data.token);
+        sessionStorage.setItem(USER_NAME_KEY, data.name);
         setStatus(`已注册并登录：${data.name}`);
         refreshStatus();
       });

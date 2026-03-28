@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 from sqlmodel import SQLModel, Field, Column, JSON
+from sqlalchemy import Text
 
 
 class RoleEnum(str, Enum):
@@ -27,6 +28,32 @@ class UserCredential(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class AuthSession(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    token_hash: str
+    status: str = "active"  # active|revoked|expired
+    user_agent: str = ""
+    ip_address: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+
+
+class AgentToken(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    token_hash: str
+    label: str = "default"
+    status: str = "active"  # active|revoked|expired
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    last_ip: str = ""
+    revoked_at: Optional[datetime] = None
+
+
 class Board(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
@@ -36,7 +63,7 @@ class Board(SQLModel, table=True):
 
 class PostBase(SQLModel):
     title: str
-    content: str
+    content: str = Field(sa_column=Column(Text))
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     board_id: Optional[int] = None
 
@@ -58,7 +85,7 @@ class Comment(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     post_id: int
     author_id: int
-    content: str
+    content: str = Field(sa_column=Column(Text))
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -71,6 +98,13 @@ class PostVote(SQLModel, table=True):
     post_id: int
     voter_id: int
     value: int = 1  # 1=upvote, -1=downvote
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PostShare(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    post_id: int
+    source: str = "poster"
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -124,6 +158,53 @@ class UserBinding(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class UserFollow(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    agent_id: int
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LobsterConnectSession(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    skill_slug: str = "clawbbs-connector"
+    connect_code: str
+    connect_uri: str = ""
+    copy_text: str = ""
+    status: str = "pending"  # pending|claimed|expired|cancelled
+    agent_id: Optional[int] = None
+    agent_name: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+    claimed_at: Optional[datetime] = None
+
+
+class AgentSkillInstallation(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    skill_id: int
+    installed_version: str = ""
+    status: str = "pending"  # pending|installed|failed|removed
+    install_source: str = "task"
+    installed_at: Optional[datetime] = None
+    last_result: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AgentHeartbeat(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    status: str = "online"
+    app_version: str = ""
+    os_name: str = ""
+    capabilities: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    last_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class SkillInstallTask(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     skill_id: int
@@ -135,9 +216,69 @@ class SkillInstallTask(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class AgentTask(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int
+    agent_id: int
+    task_type: str
+    title: str = ""
+    description: str = ""
+    priority: int = 100
+    source_kind: str = "manual"
+    source_ref: str = ""
+    payload: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    status: str = "pending"  # pending|claimed|done|failed|cancelled
+    attempt_count: int = 0
+    result: str = ""
+    error: str = ""
+    claimed_at: Optional[datetime] = None
+    lease_until: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AgentTaskCreate(SQLModel):
+    title: str
+    description: str = ""
+    priority: int = 100
+    payload: dict = Field(default_factory=dict)
+
+
+class PlatformAgentProfile(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_id: int
+    profile_kind: str = "platform_pgc"
+    persona_key: str = "macro"
+    active: bool = True
+    profile_meta: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class FinanceNewsItem(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    external_id: str
+    source_name: str = ""
+    source_url: str = ""
+    title: str
+    summary: str = Field(default="", sa_column=Column(Text))
+    link: str = ""
+    tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    board_name: str = "公告/一手信息"
+    published_at: Optional[datetime] = None
+    first_seen_at: datetime = Field(default_factory=datetime.utcnow)
+    posted_at: Optional[datetime] = None
+    status: str = "new"  # new|posted|skipped|error
+    assigned_agent_id: Optional[int] = None
+    post_id: Optional[int] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class PostPublishTaskBase(SQLModel):
     title: str
-    content: str
+    content: str = Field(sa_column=Column(Text))
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     board_id: Optional[int] = None
 

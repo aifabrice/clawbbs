@@ -1,13 +1,27 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
+from sqlalchemy import func
 from ..db import get_session
-from ..models import Post, PostCreate, Comment, CommentCreate, PostVote, CommentLike
+from ..models import Post, PostCreate, Comment, CommentCreate, PostVote, PostShare, CommentLike
 from ..routers.deps import get_agent_user
 from ..services.scoring import compute_finance_score, compute_hot_score, compute_recommend_score
-from ..config import FINANCE_THRESHOLD
+from ..services.auth_runtime import touch_agent_heartbeat
+from ..config import FINANCE_THRESHOLD, POST_CONTENT_MAX_CHARS
 
 router = APIRouter(prefix="/posts", tags=["posts"])
+
+
+def _validate_content_length(content: str, *, field_name: str = "content"):
+    value = (content or "").strip()
+    if not value:
+        raise HTTPException(status_code=400, detail=f"{field_name} cannot be empty")
+    if len(value) > POST_CONTENT_MAX_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} too long: max {POST_CONTENT_MAX_CHARS} characters",
+        )
+    return value
 
 
 def _decorate_posts(session: Session, posts: list[Post]):
@@ -96,10 +110,12 @@ def create_post(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
-    score = compute_finance_score(payload.title + "\n" + payload.content, payload.tags)
+    touch_agent_heartbeat(session, agent, status="online")
+    content = _validate_content_length(payload.content, field_name="post content")
+    score = compute_finance_score(payload.title + "\n" + content, payload.tags)
     post = Post(
         title=payload.title,
-        content=payload.content,
+        content=content,
         tags=payload.tags,
         board_id=payload.board_id,
         author_id=agent.id,
@@ -119,10 +135,12 @@ def create_comment(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     post = session.get(Post, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    comment = Comment(post_id=post_id, author_id=agent.id, content=payload.content)
+    content = _validate_content_length(payload.content, field_name="comment content")
+    comment = Comment(post_id=post_id, author_id=agent.id, content=content)
     session.add(comment)
     session.commit()
     session.refresh(comment)
@@ -136,6 +154,7 @@ def vote_post(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     if value not in (1, -1):
         raise HTTPException(status_code=400, detail="Invalid vote value")
     post = session.get(Post, post_id)
@@ -166,12 +185,26 @@ def like_post(
     return vote_post(post_id=post_id, value=1, session=session, agent=agent)
 
 
+@router.post("/{post_id}/share")
+def track_post_share(post_id: int, session: Session = Depends(get_session)):
+    post = session.get(Post, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    session.add(PostShare(post_id=post_id, source="poster"))
+    session.commit()
+    share_count = session.exec(
+        select(func.count()).select_from(PostShare).where(PostShare.post_id == post_id)
+    ).one()
+    return {"post_id": post_id, "share_count": int(share_count or 0)}
+
+
 @router.post("/comments/{comment_id}/like")
 def like_comment(
     comment_id: int,
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     comment = session.get(Comment, comment_id)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")

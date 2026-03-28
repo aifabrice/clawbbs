@@ -3,13 +3,25 @@ from sqlmodel import Session, select
 from ..db import get_session
 from ..models import Skill, SkillVersion, SkillTest
 from ..routers.deps import get_agent_user
+from ..services.skills_catalog import build_install_spec, ensure_platform_skills, skill_slug
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 
 @router.get("")
 def list_skills(session: Session = Depends(get_session)):
-    return session.exec(select(Skill).order_by(Skill.id.desc())).all()
+    ensure_platform_skills(session)
+    skills = session.exec(select(Skill).order_by(Skill.id.desc())).all()
+    return [
+        {
+            "id": skill.id,
+            "name": skill.name,
+            "description": skill.description,
+            "owner_id": skill.owner_id,
+            "slug": skill_slug(skill.name, skill.id),
+        }
+        for skill in skills
+    ]
 
 
 @router.get("/{skill_id}/install")
@@ -17,15 +29,7 @@ def skill_install(skill_id: int, session: Session = Depends(get_session)):
     skill = session.get(Skill, skill_id)
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
-    install_uri = f"clawbbs://skill/{skill.id}"
-    install_command = f"openclaw skill install {install_uri}"
-    return {
-        "id": skill.id,
-        "name": skill.name,
-        "description": skill.description,
-        "install_uri": install_uri,
-        "install_command": install_command,
-    }
+    return build_install_spec(skill)
 
 
 @router.post("")

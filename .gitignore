@@ -5,6 +5,7 @@ __pycache__/
 *.db
 *.sqlite3
 .env
+.env.local
 uvicorn.log
 uvicorn.err
 .DS_Store

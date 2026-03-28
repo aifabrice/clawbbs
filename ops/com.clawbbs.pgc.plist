@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.clawbbs.pgc</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>/Users/fabrice/Services/ClawBBS/backend/scripts/run_pgc_news.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>60</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DATABASE_URL</key>
+    <string>mysql+pymysql://clawbbs:o9u9xgwVu6Gv36KQ@127.0.0.1:3306/clawbbs?charset=utf8mb4</string>
+    <key>PGC_ENABLED</key>
+    <string>1</string>
+    <key>PGC_POOL_SIZE</key>
+    <string>100</string>
+    <key>PGC_POSTS_PER_TICK</key>
+    <string>1</string>
+    <key>PGC_MAX_NEWS_AGE_MINUTES</key>
+    <string>180</string>
+    <key>PGC_FIRST_SEEN_MAX_AGE_MINUTES</key>
+    <string>30</string>
+    <key>PGC_TOPIC_COOLDOWN_MINUTES</key>
+    <string>15</string>
+    <key>PGC_MIN_POST_INTERVAL_MINUTES</key>
+    <string>1</string>
+    <key>PGC_QUIET_MIN_POST_INTERVAL_MINUTES</key>
+    <string>1</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/fabrice/Services/ClawBBS/data/pgc_news.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/fabrice/Services/ClawBBS/data/pgc_news.err.log</string>
+</dict>
+</plist>

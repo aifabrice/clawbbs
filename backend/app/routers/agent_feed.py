@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, Header, HTTPException
+from datetime import datetime
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlmodel import Session, select
 import secrets
 from ..db import get_session
-from ..models import Post, Skill, User, RoleEnum, Comment, PostVote
+from ..models import Post, Skill, User, RoleEnum, Comment, PostVote, UserBinding, LobsterConnectSession
+from ..services.lobster_names import generate_random_lobster_name
 from ..routers.deps import get_agent_user
 from ..config import AGENT_TOKEN_HEADER, AGENT_BOOTSTRAP_TOKEN
 from ..services.scoring import compute_hot_score, compute_recommend_score
+from ..services.skills_catalog import build_install_spec, skill_slug
+from ..services.auth_runtime import issue_agent_token, revoke_agent_token, touch_agent_heartbeat, upsert_agent_skill_installation
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -31,13 +35,19 @@ def agent_capabilities():
             "user_login": "/users/login",
             "user_bind": "/users/bind",
             "pairing_code": "/users/pairing",
+            "connect_claim": "/agent/connect-claim",
+            "token_rotate": "/agent/token/rotate",
             "task_dispatch": "/tasks/skill-install/{skill_id}",
+            "task_create_todo": "/tasks/todo",
             "task_poll": "/tasks/agent",
+            "task_claim": "/tasks/{task_id}/claim",
             "task_complete": "/tasks/{task_id}/complete",
+            "task_owner_list": "/tasks/me",
         },
         "install": {
             "uri_template": "clawbbs://skill/{id}",
-            "command_template": "openclaw skill install clawbbs://skill/{id}",
+            "spec_endpoint": "/api/skills/{id}/install",
+            "note": "Fetch the install spec, then copy the skill folder into <workspace>/skills or ~/.openclaw/skills.",
         },
     }
 
@@ -45,21 +55,201 @@ def agent_capabilities():
 @router.post("/register")
 def agent_register(
     name: str,
+    request: Request,
     bootstrap: str | None = Header(default=None, alias="X-Agent-Bootstrap"),
     session: Session = Depends(get_session),
 ):
     if not AGENT_BOOTSTRAP_TOKEN or bootstrap != AGENT_BOOTSTRAP_TOKEN:
         raise HTTPException(status_code=403, detail="Invalid bootstrap token")
-    token = secrets.token_urlsafe(24)
-    user = User(name=name, role=RoleEnum.agent, token=token)
+    user = User(name=name, role=RoleEnum.agent)
     session.add(user)
     session.commit()
     session.refresh(user)
+    token = issue_agent_token(
+        session,
+        user,
+        label="bootstrap-register",
+        last_ip=request.client.host if request.client else "",
+    )
     return {
         "id": user.id,
         "name": user.name,
-        "token": user.token,
+        "token": token,
         "header": AGENT_TOKEN_HEADER,
+    }
+
+
+def _recover_claimed_binding(session: Session, item: LobsterConnectSession) -> dict | None:
+    binding = session.exec(
+        select(UserBinding).where(UserBinding.user_id == item.user_id)
+    ).first()
+    if not binding:
+        return None
+    agent = session.get(User, binding.agent_id)
+    if not agent:
+        return None
+    if item.status != "claimed" or item.agent_id != agent.id:
+        item.agent_id = agent.id
+        item.agent_name = agent.name
+        item.status = "claimed"
+        item.claimed_at = item.claimed_at or datetime.utcnow()
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+    return {
+        "status": "claimed",
+        "recovered": True,
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "agent_token": agent.token,
+        "header": AGENT_TOKEN_HEADER,
+        "user_id": item.user_id,
+        "skill_slug": item.skill_slug,
+        "connect_code": item.connect_code,
+        "claimed_at": item.claimed_at,
+    }
+
+
+@router.post("/token/rotate")
+def rotate_agent_auth_token(
+    request: Request,
+    token: str | None = Header(default=None, alias=AGENT_TOKEN_HEADER),
+    revoke_previous: bool = True,
+    agent=Depends(get_agent_user),
+    session: Session = Depends(get_session),
+):
+    next_token = issue_agent_token(
+        session,
+        agent,
+        label="rotated",
+        last_ip=request.client.host if request.client else "",
+    )
+    if revoke_previous and token and token != next_token:
+        revoke_agent_token(session, token)
+    touch_agent_heartbeat(session, agent, status="online")
+    return {
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "agent_token": next_token,
+        "header": AGENT_TOKEN_HEADER,
+        "rotated": True,
+    }
+
+
+@router.post("/connect-claim")
+def agent_connect_claim(
+    code: str,
+    request: Request,
+    agent_name: str = "",
+    session: Session = Depends(get_session),
+):
+    item = session.exec(
+        select(LobsterConnectSession)
+        .where(LobsterConnectSession.connect_code == code)
+        .order_by(LobsterConnectSession.created_at.desc())
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Invalid connect code")
+    if item.status == "claimed" and item.agent_id:
+        agent = session.get(User, item.agent_id)
+        return {
+            "status": "already_claimed",
+            "agent_id": agent.id if agent else item.agent_id,
+            "agent_name": agent.name if agent else item.agent_name,
+            "agent_token": agent.token if agent else None,
+            "header": AGENT_TOKEN_HEADER,
+        }
+    if item.expires_at and datetime.utcnow() > item.expires_at:
+        item.status = "expired"
+        session.add(item)
+        session.commit()
+        raise HTTPException(status_code=400, detail="Connect code expired")
+
+    existing_binding = session.exec(
+        select(UserBinding).where(UserBinding.user_id == item.user_id)
+    ).first()
+    if existing_binding:
+        recovered = _recover_claimed_binding(session, item)
+        if recovered:
+            return recovered
+        bound_agent = session.get(User, existing_binding.agent_id)
+        item.agent_id = bound_agent.id if bound_agent else existing_binding.agent_id
+        item.agent_name = bound_agent.name if bound_agent else (agent_name or item.agent_name)
+        item.status = "claimed"
+        item.claimed_at = datetime.utcnow()
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return {
+            "status": "reconnected",
+            "agent_id": bound_agent.id if bound_agent else existing_binding.agent_id,
+            "agent_name": bound_agent.name if bound_agent else item.agent_name,
+            "agent_token": bound_agent.token if bound_agent else None,
+            "header": AGENT_TOKEN_HEADER,
+        }
+
+    proposed_name = (agent_name or "").strip()
+    final_name = (proposed_name or generate_random_lobster_name(session)).strip()[:64]
+    user = User(name=final_name, role=RoleEnum.agent)
+    session.add(user)
+    session.flush()
+    token = issue_agent_token(
+        session,
+        user,
+        label="connect-claim",
+        last_ip=request.client.host if request.client else "",
+        commit=False,
+    )
+
+    binding = UserBinding(user_id=item.user_id, agent_id=user.id)
+    item.agent_id = user.id
+    item.agent_name = user.name
+    item.status = "claimed"
+    item.claimed_at = datetime.utcnow()
+    session.add(binding)
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+
+    warnings: list[str] = []
+    connector_skill = session.exec(
+        select(Skill).where(Skill.name == item.skill_slug)
+    ).first()
+    if connector_skill and connector_skill.id is not None:
+        try:
+            upsert_agent_skill_installation(
+                session,
+                agent_id=user.id,
+                skill_id=connector_skill.id,
+                status="installed",
+                installed_version="v0.1.0",
+                install_source="connect-claim",
+                last_result="connector claimed and ready",
+            )
+        except Exception:
+            warnings.append("skill_installation_state_not_updated")
+
+    try:
+        touch_agent_heartbeat(
+            session,
+            user,
+            status="online",
+            capabilities={"connector": item.skill_slug, "connect_claim": True},
+        )
+    except Exception:
+        warnings.append("heartbeat_not_updated")
+
+    return {
+        "status": "claimed",
+        "agent_id": user.id,
+        "agent_name": user.name,
+        "agent_token": token,
+        "header": AGENT_TOKEN_HEADER,
+        "user_id": item.user_id,
+        "skill_slug": item.skill_slug,
+        "connect_code": item.connect_code,
+        "claimed_at": item.claimed_at,
+        "warnings": warnings,
     }
 
 
@@ -112,6 +302,7 @@ def agent_list(
     session: Session = Depends(get_session),
     agent=Depends(get_agent_user),
 ):
+    touch_agent_heartbeat(session, agent, status="online")
     agents = session.exec(
         select(User).where(User.role.in_([RoleEnum.agent, RoleEnum.admin]))
     ).all()
@@ -138,8 +329,9 @@ def agent_skills(limit: int = 50, session: Session = Depends(get_session)):
                 "name": s.name,
                 "description": s.description,
                 "owner_id": s.owner_id,
-                "install_command": f"openclaw skill install clawbbs://skill/{s.id}",
+                "slug": skill_slug(s.name, s.id),
                 "install_url": f"/api/skills/{s.id}/install",
+                "install_spec": build_install_spec(s),
             }
             for s in skills
         ]

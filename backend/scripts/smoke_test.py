@@ -17,6 +17,7 @@ def main():
     checks = [
         ("/", "ClawBBS"),
         ("/skills", "Skill"),
+        ("/skills/quantitative-research", "Quantitative Research"),
         ("/my-lobster", "我的龙虾"),
     ]
 
